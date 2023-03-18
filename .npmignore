@@ -1,0 +1,8 @@
+# Project
+example/
+
+# Typescript
+tsconfig.tsbuildinfo
+tsconfig.json
+*.ts
+!*.d.ts
