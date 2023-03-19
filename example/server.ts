@@ -1,7 +1,7 @@
 import createApp, { createRoute } from "../src/index.js";
 const app = createApp();
 app.listen(3000, () => console.log("Listen on 3000"));
-app.get("/", (_req, _res, next) => next(), ({res, req}) => res.json({
+app.get("/", ({res, req}) => res.json({
   from: "next",
   ip: req.ip,
   port: req.port,
@@ -12,39 +12,14 @@ app.get("/", (_req, _res, next) => next(), ({res, req}) => res.json({
   }
 }));
 
-app.route("/ip").get((req, res) => {
-  const type = req.query.t ?? req.query.type;
-  const ip = req.ip ?? null;
-  if (type === "yaml" || type === "yml") return res.yaml({ip});
-  else if (type === "text") res.send(ip);
-  return res.json({ip});
-});
-
-app.all("/body", (req, res, next) => req.method !== "GET" ? next() : res.status(400).json({error: "methods with Body only"}), ({res, req}) => res.json({
-  body: req.body
-}));
+app.get("wait", ({res}) => setTimeout(() => res.json({after: 1000}), 1000));
+app.get("throw", ({}) => Promise.reject(new Error("Teste")));
 
 const app2 = createRoute();
-app.use("/main", app2);
-app2.get("/", (req) => {req.res.json({ok: true})});
-app2.get("/throw", () => {throw new Error("test 1")});
-app2.get("/throw2", async () => {throw new Error("test 2")});
+app.use("app2", app2);
+app2.get("/", ({res}) => res.json(app2.getRoutes()));
 
-const app3 = createApp();
-app2.use(app3);
-app2.use("/:google", app3);
-app3.get("/bing", (req, res) => {
-  res.json({
-    ok: "Bing from app3",
-    parms: req.params
-  });
-});
-
-app.all("*", (req, res) => {
-  return res.json({
-    method: req.method,
-    path: req.path,
-    protocol: req.protocol,
-    error: "Page not exist"
-  });
-});
+app.use((err, _req, res, _next) => {
+  console.log("Catch error", err);
+  return res.status(500).json({error: String(err?.message || err)});
+})

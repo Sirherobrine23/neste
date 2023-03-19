@@ -15,7 +15,9 @@
     "allowJs": true,
     "composite": true,
     "lib": [
-      "ESNext"
+      "ESNext",
+      "ES2015",
+      "ES2016"
     ]
   },
   "exclude": [

@@ -8,25 +8,22 @@ interface createApp {
 }
 
 export interface Server extends Neste {
-  listen: http.Server["listen"]
+  listen: http.Server["listen"];
 }
 
-createApp.Route = () => createRoute();
 /**
  *  Create New Neste app routes with app listen
- *
- * @returns App routes
- */
-function createApp(): Server {
-  const app = createRoute();
-  return Object.assign(app, {
-    listen(...arg: any[]) {
-      const server = http.createServer();
-      server.on("request", app.callRequest);
-      server.listen(...arg);
-    }
-  }) as any;
+*
+* @returns App routes
+*/
+function createApp() {
+  const app: Server = createRoute() as any;
+  app.listen = function(...args: any[]) {
+    return http.createServer().on("request", app).listen(...args);
+  }
+  return app;
 }
+createApp.Route = () => createRoute();
 
 export default createApp;
 export {createApp};
