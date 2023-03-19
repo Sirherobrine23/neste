@@ -1,6 +1,6 @@
 {
   "name": "neste",
-  "version": "3.4.1",
+  "version": "1.0.1",
   "description": "express rewrited in typescript",
   "type": "module",
   "main": "src/index.js",

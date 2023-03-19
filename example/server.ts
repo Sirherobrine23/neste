@@ -1,10 +1,6 @@
-import { createApp } from "../src/index.js";
+import createApp, { createRoute } from "../src/index.js";
 const app = createApp();
-
-app.get("__route", function ({res}) {
-  res.json(this.route_registred);
-});
-
+app.listen(3000, () => console.log("Listen on 3000"));
 app.get("/", (_req, _res, next) => next(), ({res, req}) => res.json({
   from: "next",
   ip: req.ip,
@@ -28,7 +24,7 @@ app.all("/body", (req, res, next) => req.method !== "GET" ? next() : res.status(
   body: req.body
 }));
 
-const app2 = createApp();
+const app2 = createRoute();
 app.use("/main", app2);
 app2.get("/", (req) => {req.res.json({ok: true})});
 app2.get("/throw", () => {throw new Error("test 1")});
