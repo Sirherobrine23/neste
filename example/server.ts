@@ -17,7 +17,7 @@ app.get("throw", ({}) => Promise.reject(new Error("Teste")));
 
 const app2 = createRoute();
 app.use("app2", app2);
-app2.get("/", ({res}) => res.json(app2.getRoutes()));
+app2.get("/", ({req, res}) => res.json({ip: req.ip, port: req.port}));
 
 app.use((err, _req, res, _next) => {
   console.log("Catch error", err);

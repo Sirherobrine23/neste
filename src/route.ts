@@ -49,7 +49,7 @@ export interface Response extends http.ServerResponse<Request> {
   status(code: number): this;
 }
 
-export type errorHandler = (error: Error|TypeError, req: Request, res: Response, next: (err?: any) => void) => void|Promise<void>|any;
+export type errorHandler = (error: Error|TypeError, req: Request, res: Response, next: () => void) => void|Promise<void>|any;
 export type handler = (this: Neste, req: Request, res?: Response, next?: (err?: any) => void) => void|Promise<void>|any;
 
 interface Route {
@@ -63,25 +63,16 @@ interface Route {
   head(...handler: handler[]): this;
 }
 
-export type routeObject = {
-  path?: string,
-} & ({
-  is: "route",
-  method: string,
-  fn: handler[],
-}|{
-  is: "middle",
-  routes: routeObject[]
-});
-
 /** Object includes basics functions and identifications */
 export interface Neste {
-  readonly isNeste: boolean;
-
   /**
    * Call request event
    */
+  callRequest(rawRequest: http.IncomingMessage|http2.Http2ServerRequest|Request, rawResponse: http.ServerResponse|http2.Http2ServerResponse|Response): Promise<void>;
   (rawRequest: http.IncomingMessage|http2.Http2ServerRequest|Request, rawResponse: http.ServerResponse|http2.Http2ServerResponse|Response): Promise<void>;
+
+  /** Default JSON space to send */
+  jsonSpaces: number;
 
   /**
    * Extends with middlerares or second instace from server
@@ -105,16 +96,14 @@ export interface Neste {
   options(path: string, ...handler: handler[]): this;
   head(path: string, ...handler: handler[]): this;
 
-  getRoutes(): routeObject[];
-
   /** Create route and return listeners */
   route(path: string): Route;
-  jsonSpaces: number;
 }
 
-export function createRoute(): Neste {
-  const route_registred: ({
-    is: "middle",
+export class Neste extends Function implements Neste {
+  constructor() {/*Needs fix this in the future if arguments.callee is removed*/ super("return arguments.callee.callRequest.call(arguments.callee, ...(arguments))");}
+  route_registred: ({
+    is: "middleware",
     path?: string,
     middle: (Neste|handler|errorHandler)[]
   } | {
@@ -124,19 +113,8 @@ export function createRoute(): Neste {
     fn: handler[]
   })[] = [];
 
-  function register_route(method: string, requestPath: string, ...fn: handler[]) {
-    method = method.toUpperCase();
-    const posixFix = (!requestPath) ? "/*" : path.posix.resolve("/", requestPath);
-    if (!(route_registred[posixFix])) route_registred[posixFix] = [];
-    route_registred.push(({
-      is: "route",
-      method,
-      path: posixFix,
-      fn: fn.filter(k => (typeof k === "function" && (k.length >= 1 && k.length <= 4))),
-    }));
-  }
-
-  async function base(rawRequest, rawResponse) {
+  jsonSpaces = 2;
+  callRequest = (rawRequest: Request | http.IncomingMessage | http2.Http2ServerRequest, rawResponse: Response | http.ServerResponse<http.IncomingMessage> | http2.Http2ServerResponse): Promise<void> => {
     // Update Response object
     const res: Response = rawResponse as any;
     res.status ??= (code) => {res.statusCode = code; return res;}
@@ -153,7 +131,7 @@ export function createRoute(): Neste {
     };
 
     res.yaml ??= async (data) => new Promise<void>((done, reject) => res.on("error", reject).setHeader("content-type", "text/yaml, text/x-yaml").send(yaml.stringify(data)).on("close", () => done()));
-    res.json ??= async (data, replacerFunc = null) => new Promise<void>((done, reject) => res.once("error", reject).setHeader("content-type", "application/json").send(JSON.stringify(data, replacerFunc, base.jsonSpaces)).once("close", () => done()));
+    res.json ??= async (data, replacerFunc = null) => new Promise<void>((done, reject) => res.once("error", reject).setHeader("content-type", "application/json").send(JSON.stringify(data, replacerFunc, this.jsonSpaces)).once("close", () => done()));
 
     const req: Request = rawRequest as any;
     req.params ??= {};
@@ -199,14 +177,14 @@ export function createRoute(): Neste {
     if (req["allow404"] === undefined) req["allow404"] = true;
 
     const reqPathSplit = req.path.split("/");
-    const routes = route_registred.map(route => {
+    const routes = this.route_registred.map(route => {
       let ret: {params: {[name: string]: string}, route: typeof route} = {params: {}, route};
-      if (route.is === "middle") if (!route.path) return ret;
-      if (!((route.is === "middle") || (route.method === req.method || route.method === "ALL"))) return null;
+      if (route.is === "middleware") if (!route.path) return ret;
+      if (!((route.is === "middleware") || (route.method === req.method || route.method === "ALL"))) return null;
       const splitedRegistredPath = route.path.split("/");
       for (const kIndex in reqPathSplit) {
         if (splitedRegistredPath[kIndex] === undefined) {
-          if (route.is === "middle") break;
+          if (route.is === "middleware") break;
           return null;
         } else if (splitedRegistredPath[kIndex] === "*") break;
         else if (splitedRegistredPath[kIndex].startsWith(":")) ret.params[splitedRegistredPath[kIndex].slice(1).trim()] = reqPathSplit[kIndex];
@@ -219,31 +197,28 @@ export function createRoute(): Neste {
     const backupPath = String(req.path);
     let indexRoute = 0;
     let callIndex = 0;
-    async function next(err?: any) {
+    const next = async (err?: any) => {
       if (res.closed) return;
       if (err) {
-        const errHandler: errorHandler = route_registred.reduce((acc, r) => {
-          if (acc) return acc;
-          else if (r.is === "route") return acc;
-          const find = r.middle.find(k => typeof k !== "function" ? false : k.length >= 4);
-          if (find) return find;
-          return acc;
-        }, null) as errorHandler ?? function (err, _req, res, _next) {
-          console.log(err)
-          return res.status(500).json({
-            error: String(err?.message || err),
-            stack: err?.stack,
-            cause: err?.cause
-          });
-        };
-        return Promise.resolve(errHandler(err, req, res, (kill?: any) => {}));
+        let errHandler: errorHandler;
+        if (!(errHandler = this.route_registred.reduce((acc, r) => {if (acc) return acc; else if (r.is === "route") return acc; const find = r.middle.find(k => typeof k !== "function" ? false : k.length >= 4); if (find) return find; return acc;}, null as any) as errorHandler)) {
+          errHandler = function (err, req, res, next) {
+            console.log(err)
+            return res.status(500).json({
+              error: String(err?.message || err),
+              stack: err?.stack,
+              cause: err?.cause
+            });
+          }
+        }
+        return Promise.resolve(errHandler.call(this, err, req, res, () => {}));
       }
       const r = routes[indexRoute];
       if (!r) {
         if (r === null) {indexRoute++; callIndex = 0; return next();}
-        if (req["allow404"]) return (route_registred.reduceRight((acc, r) => {
+        if (req["allow404"]) return (this.route_registred.reduceRight((acc, r) => {
           if (acc) return acc;
-          else if (r.is === "middle") return acc;
+          else if (r.is === "middleware") return acc;
           else if (r.path !== "*") return acc;
           else if (r.method !== "ALL") return acc;
           const find = r.fn.find(fn => fn.length < 4);
@@ -255,83 +230,84 @@ export function createRoute(): Neste {
             path: req.path,
             params: req.params
           });
-        }).call(base, req, res, next);
+        }).call(this, req, res, next);
         return;
       }
       req.params = {...backupParms, ...r.params};
       req.path = backupPath;
-      if (r.route.is === "middle") if (r.route.path) req.path = path.posix.resolve("/", req.path.split("/").slice(r.route.path.split("/").length).join("/"));
-      const call: Neste | handler = (r.route.is === "middle" ? r.route.middle[callIndex++] : r.route.fn[callIndex++]) as any;
+      if (r.route.is === "middleware") if (r.route.path) req.path = path.posix.resolve("/", req.path.split("/").slice(r.route.path.split("/").length).join("/"));
+      const call: Neste | handler = (r.route.is === "middleware" ? r.route.middle[callIndex++] : r.route.fn[callIndex++]) as any;
       if (!call) {indexRoute++; callIndex = 0; return next();}
       if (typeof call !== "function") return next();
 
       // Call middle
-      if ((call as Neste)?.isNeste === true) return (call as Neste)(Object.assign(req, {allow404: false}), res).then(() => next());
+      if (call instanceof Neste) return call(Object.assign(req, {allow404: false}), res).then(() => next());
 
       // ignore error
       if (call.length >= 4) return next();
 
       // Call func
-      return Promise.resolve().then(() => call.call(base, req, res, next)).catch(next);
+      return Promise.resolve().then(() => call.call(this, req, res, next)).catch(next);
     }
 
     // Fist call
     return next();
-  };
-  base.jsonSpaces = 2;
-  base.isNeste = true;
-  Object.defineProperty(base, "isNeste", {writable: false});
-
-  base.getRoutes = function (): routeObject[] {
-    return route_registred.map(route => {
-      if (route.is === "route") return {
-        is: "route",
-        path: route.path,
-        method: route.method,
-        fn: route.fn,
-      };
-
-      return {
-        is: "middle",
-        path: route.path,
-        routes: []
-      }
-    });
   }
 
-  base.all = function(path: string, ...handlers: handler[]) {
-    register_route("ALL", path, ...handlers);
-    return base;
-  };
-  base.get = function(path: string, ...handlers: handler[]) {
-    register_route("GET", path, ...handlers);
-    return base;
+  #register_route(method: string, requestPath: string, ...fn: handler[]) {
+    method = method.toUpperCase();
+    const posixFix = (!requestPath) ? "/*" : path.posix.resolve("/", requestPath);
+    if (!(this.route_registred[posixFix])) this.route_registred[posixFix] = [];
+    this.route_registred.push(({
+      is: "route",
+      method,
+      path: posixFix,
+      fn: fn.filter(k => (typeof k === "function" && (k.length >= 1 && k.length <= 4))),
+    }));
   }
-  base.post = function(path: string, ...handlers: handler[]) {
-    register_route("POST", path, ...handlers);
-    return base;
+
+  all(path: string, ...handler: handler[]) {
+    this.#register_route("ALL", path, ...handler);
+    return this;
   }
-  base.put = function(path: string, ...handlers: handler[]) {
-    register_route("PUT", path, ...handlers);
-    return base;
+
+  get(path: string, ...handler: handler[]) {
+    this.#register_route("GET", path, ...handler);
+    return this;
   }
-  base.delete = function(path: string, ...handlers: handler[]) {
-    register_route("DELETE", path, ...handlers);
-    return base;
+
+  post(path: string, ...handler: handler[]) {
+    this.#register_route("POST", path, ...handler);
+    return this;
   }
-  base.patch = function(path: string, ...handlers: handler[]) {
-    register_route("PATCH", path, ...handlers);
-    return base;
-  },
-  base.options = function(path: string, ...handlers: handler[]) {
-    register_route("OPTIONS", path, ...handlers);
-    return base;
-  },
-  base.head = function(path: string, ...handlers: handler[]) {
-    register_route("HEAD", path, ...handlers);
-    return base;
-  },
-  base.route = function(path: string) {
+
+  put(path: string, ...handler: handler[]) {
+    this.#register_route("PUT", path, ...handler);
+    return this;
+  }
+
+  delete(path: string, ...handler: handler[]) {
+    this.#register_route("DELETE", path, ...handler);
+    return this;
+  }
+
+  patch(path: string, ...handler: handler[]) {
+    this.#register_route("PATCH", path, ...handler);
+    return this;
+  }
+
+  options(path: string, ...handler: handler[]) {
+    this.#register_route("OPTIONS", path, ...handler);
+    return this;
+  }
+
+  head(path: string, ...handler: handler[]) {
+    this.#register_route("HEAD", path, ...handler);
+    return this;
+  }
+
+  route(path: string): Route {
+    const register_route = this.#register_route;
     const d: Route = {
       all(...handlers) {
         register_route("ALL", path, ...handlers);
@@ -368,36 +344,26 @@ export function createRoute(): Neste {
     };
     return d;
   }
-  base.use = function(hpath: string|(Neste|handler|errorHandler), ...middle: (Neste|handler|errorHandler)[]) {
+
+  use(hpath: string|(Neste|handler|errorHandler), ...middle: (Neste|handler|errorHandler)[]) {
     let pathRoot: string;
     const gMiddle: (Neste|handler|errorHandler)[] = [];
     if (typeof hpath === "string") pathRoot = hpath;
     else gMiddle.push(hpath);
     gMiddle.push(...middle);
-    route_registred.push({
-      is: "middle",
+    this.route_registred.push({
+      is: "middleware",
       ...(pathRoot ? {
         path: path.posix.resolve("/", pathRoot),
       } : {}),
       middle: gMiddle.filter(k => {
         let ok = (typeof k === "function" && (k.length >= 1 && k.length <= 4))
-        if (!ok) {
-          const t = k as Neste;
-          const backup = t.isNeste;
-          try {
-            // @ts-ignore
-            t.isNeste = false;
-            if (t.isNeste === true as false) ok = true;
-            // @ts-ignore
-            t.isNeste = backup;
-          } catch {
-            ok = true;
-          }
-        }
+        if (!ok) ok = k instanceof Neste;
         return ok;
       }),
     })
-    return base;
+    return this;
   }
-  return base;
 }
+
+export function createRoute() {return new Neste()}
