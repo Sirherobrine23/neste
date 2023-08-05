@@ -1,5 +1,8 @@
 import { Handlers, Layer } from "./layer"
-export const methods: ("acl"|"bind"|"checkout"|"connect"|"copy"|"delete"|"get"|"head"|"link"|"lock"|"m-search"|"merge"|"mkactivity"|"mkcalendar"|"mkcol"|"move"|"notify"|"options"|"patch"|"post"|"propfind"|"proppatch"|"purge"|"put"|"rebind"|"report"|"search"|"source"|"subscribe"|"trace"|"unbind"|"unlink"|"unlock"|"unsubscribe")[] = ["acl", "bind", "checkout", "connect", "copy", "delete", "get", "head", "link", "lock", "m-search", "merge", "mkactivity", "mkcalendar", "mkcol", "move", "notify", "options", "patch", "post", "propfind", "proppatch", "purge", "put", "rebind", "report", "search", "source", "subscribe", "trace", "unbind", "unlink", "unlock", "unsubscribe"];
+const __methods = [ "get", "head", "post", "put", "delete", "connect", "options", "trace" ] as const;
+export type Methods = typeof __methods[number];
+export const methods: Methods[] = Object.freeze(__methods) as any;
+
 const toString = Object.prototype.toString;
 
 export interface Route extends Record<typeof methods[number], (...handles: Handlers[]) => Route> {};

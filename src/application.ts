@@ -428,7 +428,7 @@ Application.prototype.listen = function listen() {
 };
 
 methods.forEach(function (method) {
-  Application.prototype[method] = function (path) {
+  Application.prototype[method] = function (this: Application, path: any) {
     if (method === 'get' && arguments.length === 1) {
       // app.get(setting)
       return this.set(path);
