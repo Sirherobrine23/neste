@@ -1,12 +1,12 @@
 import cookie from "cookie";
+import { EventEmitter } from "events";
 import finalhandler from "finalhandler";
-import { EventEmitter } from "node:events";
-import { IncomingMessage, Server, ServerResponse, createServer } from "node:http";
-import { isIPv6 } from "node:net";
-import { parse } from "node:url";
+import { IncomingMessage, Server, ServerResponse, createServer } from "http";
+import { isIPv6 } from "net";
 import { resolve as pathResolve } from "path/posix";
+import { parse } from "url";
 import nodeUtil from "util";
-import { Handler, Layer, RequestHandler } from "./layer";
+import { ErrorRequestHandler, Handler, Layer, RequestHandler } from "./layer";
 import { Request, req as __req } from "./request";
 import { Response, res as __res } from "./response";
 import { compileQueryParser, compileTrust, methods, mixin, setPrototypeOf } from "./utils";
@@ -51,6 +51,7 @@ export class Router extends Function {
     this.set("query parser", "extended");
     this.set("subdomain offset", 2);
     this.set("trust proxy", false);
+    this.set("json spaces", 2);
 
     // trust proxy inherit back-compat
     Object.defineProperty(this.settings, trustProxyDefaultSymbol, {
@@ -62,7 +63,7 @@ export class Router extends Function {
     this.locals.settings = this.settings;
 
     // default configuration
-    this.set('jsonp callback name', 'callback');
+    this.set("jsonp callback name", "callback");
 
     // expose the prototype that will get set on requests and responses
     this.request = Object.create(__req, {
@@ -96,12 +97,14 @@ export class Router extends Function {
     const CookiesStorage = new Map<string, string>();
     if (typeof req.headers.cookie === "string") {
       const parsed = cookie.parse(req.headers.cookie);
-      Object.keys(parsed).forEach(k => CookiesStorage.set(k, parsed[k]));
+      Object.keys(parsed).forEach(k => {
+        if (parsed[k]) CookiesStorage.set(k, parsed[k]);
+      });
     }
     setPrototypeOf(res, Object.create(this.response, {}));
     setPrototypeOf(req, Object.create(this.request, {
       query: { configurable: true, enumerable: true, writable: true, value: Array.from(parseQuery.keys()).reduce<Record<string, string>>((acc, key) => { acc[key] = parseQuery.get(key); return acc; }, {}) },
-      ip: { configurable: false, enumerable: false, writable: false, value: req.socket.remoteAddress ? (isIPv6(req.socket.remoteAddress) ? `[${req.socket.remoteAddress}]:${req.socket.remotePort}` : `${req.socket.remoteAddress}:${req.socket.remotePort}`) : undefined },
+      ipPort: { configurable: false, enumerable: false, writable: false, value: req.socket.remoteAddress ? (isIPv6(req.socket.remoteAddress) ? `[${req.socket.remoteAddress}]:${req.socket.remotePort}` : `${req.socket.remoteAddress}:${req.socket.remotePort}`) : undefined },
       method: { configurable: false, enumerable: false, writable: false, value: method },
       Cookies: { configurable: true, enumerable: true, writable: true, value: CookiesStorage },
     }));
@@ -117,7 +120,6 @@ export class Router extends Function {
       req["path"] = originalPath;
       if (err && err === "route") return done();
       else if (err && err === "router") return done(err);
-
       const layer = stacks[stackX++];
       if (!layer) return done(err);
       else if (layer.method && layer.method !== method) return next(err);
@@ -126,13 +128,15 @@ export class Router extends Function {
       req["path"] = req["path"].slice(layer.path.length)||layer.path;
       layer.path = layer.params = undefined;
 
-      if (err) return layer.handle_error(err, req as any, res as any, next);
-      return (layer.handle as RequestHandler)(req as any, res as any, next);
+      if (err) layer.handle_error(err, req as any, res as any, next)
+      else layer.handle_request(req as any, res as any, next);
     }
   }
 
-  use(...fn: (Handler)[]): this;
-  use(path: string|RegExp, ...fn: (Handler)[]): this;
+  use(...fn: RequestHandler[]): this;
+  use(path: string|RegExp, ...fn: RequestHandler[]): this;
+  use(...fn: ErrorRequestHandler[]): this;
+  use(path: string|RegExp, ...fn: ErrorRequestHandler[]): this;
   use() {
     const Args = Array.from(arguments);
     let path: any = "/", offset = 0;

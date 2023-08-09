@@ -16,6 +16,7 @@ export interface Request extends http.IncomingMessage {
   xhr: boolean;
   hostname?: string;
   subdomains?: string[];
+  ipPort?: string;
   ip?: string;
   ips?: string[];
 
@@ -272,13 +273,11 @@ req.is = function is(types) {
  * @public
  */
 
-defineGetter(req, 'protocol', function protocol(){
-  const proto = this.connection.encrypted
-    ? 'https'
-    : 'http';
-  const trust = this.app.set('trust proxy fn');
+defineGetter(req, "protocol", function protocol(this:Request){
+  const proto = (this.socket || this.connection)["encrypted"] ? "https" : "http";
+  const trust = this["app"].set('trust proxy fn');
 
-  if (!trust(this.connection.remoteAddress, 0)) {
+  if (!trust((this.socket || this.connection).remoteAddress, 0)) {
     return proto;
   }
 

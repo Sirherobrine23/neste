@@ -1,16 +1,16 @@
-import contentDisposition from 'content-disposition';
-import encodeUrl from 'encodeurl';
-import escapeHtml from 'escape-html';
-import createError from 'http-errors';
-import http from 'node:http';
-import onFinished from 'on-finished';
-import { extname, resolve } from 'path';
-import send, { mime } from 'send';
-import statuses from 'statuses';
-import vary from 'vary';
-import { isAbsolute, normalizeType, normalizeTypes, setCharset } from "./utils";
-import { Request } from './request';
+import contentDisposition from "content-disposition";
 import cookie from "cookie";
+import encodeUrl from "encodeurl";
+import escapeHtml from "escape-html";
+import http from "http";
+import createError from "http-errors";
+import onFinished from "on-finished";
+import { extname, resolve } from "path";
+import send, { mime } from "send";
+import statuses from "statuses";
+import vary from "vary";
+import { Request } from "./request";
+import { isAbsolute, normalizeType, normalizeTypes, setCharset } from "./utils";
 
 export const res: Response = Object.create(http.ServerResponse.prototype);
 export interface Response extends http.ServerResponse {
@@ -353,7 +353,7 @@ export interface Response extends http.ServerResponse {
    */
   links(links: Record<string, string>): this;
 
-  setCookie(name: string, value: string, options?: cookie.CookieSerializeOptions): this;
+  setCookie(name: string, value?: string, options?: cookie.CookieSerializeOptions): this;
 }
 
 const charsetRegExp = /;\s*charset\s*=/;
@@ -387,26 +387,25 @@ res.setCookie = function setCookie(this: Response, name, value, opt) {
       Object.keys(dd.values).forEach(k => cookieMap.set(k, [ dd.values[k], dd.settings ]));
     });
   }
-  cookieMap.set(name, [ value, opt ]);
+  cookieMap.set(name, [ value||"", opt ]);
   this.setHeader("Set-Cookie", Array.from(cookieMap.keys()).map(k => {
     const [ value, options ] = cookieMap.get(k);
+    if (!value) return cookie.serialize(k, value, { expires: new Date(0), maxAge: 0 });
     return cookie.serialize(k, value, options);
   }))
   return this;
 }
 
 res.status = function status(code) {
-  if ((typeof code === 'string' || Math.floor(code) !== code) && code > 99 && code < 1000) throw new Error("res.status(" + JSON.stringify(code) + "): use res.status(" + Math.floor(code) + ") instead");
+  if ((typeof code === "string" || Math.floor(code) !== code) && code > 99 && code < 1000) throw new Error("res.status(" + JSON.stringify(code) + "): use res.status(" + Math.floor(code) + ") instead");
   this.statusCode = code;
   return this;
 };
 
 res.links = function(links){
-  let link = this.get('Link') || '';
-  if (link) link += ', ';
-  return this.set('Link', link + Object.keys(links).map(function(rel){
-    return '<' + links[rel] + '>; rel="' + rel + '"';
-  }).join(', '));
+  let link = this.get("Link") || "";
+  if (link) link += ", ";
+  return this.set("Link", link + Object.keys(links).map((rel) => "<" + links[rel] + ">; rel=\"' + rel + '\"").join(", "));
 };
 
 res.send = function send(body) {
@@ -533,28 +532,19 @@ res.json = function json(obj) {
 
   // allow status / body
   if (arguments.length === 2) {
-    // res.json(body, status) backwards compat
-    if (typeof arguments[1] === 'number') {
-      throw new Error('res.json(obj, status): Use res.status(status).json(obj) instead');
-      this.statusCode = arguments[1];
-    } else {
-      throw new Error('res.json(status, obj): Use res.status(status).json(obj) instead');
-      this.statusCode = arguments[0];
-      val = arguments[1];
-    }
+    if (typeof arguments[1] === "number") throw new Error("res.json(obj, status): Use res.status(status).json(obj) instead");
+    else throw new Error("res.json(status, obj): Use res.status(status).json(obj) instead");
   }
 
   // settings
   const app = this.app;
-  const escape = app.set('json escape')
-  const replacer = app.set('json replacer');
-  const spaces = app.set('json spaces');
-  const body = stringify(val, replacer, spaces, escape)
+  const escape = app.set("json escape")
+  const replacer = app.set("json replacer");
+  const spaces = app.set("json spaces");
+  const body = stringify(val, replacer, spaces, escape);
 
   // content-type
-  if (!this.get('Content-Type')) {
-    this.set('Content-Type', 'application/json');
-  }
+  if (!(this.get("Content-Type"))) this.set("Content-Type", "application/json");
 
   return this.send(body);
 };
@@ -564,55 +554,46 @@ res.jsonp = function jsonp(obj) {
 
   // allow status / body
   if (arguments.length === 2) {
-    // res.jsonp(body, status) backwards compat
-    if (typeof arguments[1] === 'number') {
-      throw new Error('res.jsonp(obj, status): Use res.status(status).jsonp(obj) instead');
-      this.statusCode = arguments[1];
-    } else {
-      throw new Error('res.jsonp(status, obj): Use res.status(status).jsonp(obj) instead');
-      this.statusCode = arguments[0];
-      val = arguments[1];
-    }
+    if (typeof arguments[1] === "number") throw new Error("res.jsonp(obj, status): Use res.status(status).jsonp(obj) instead");
+    else throw new Error("res.jsonp(status, obj): Use res.status(status).jsonp(obj) instead");
   }
 
   // settings
   const app = this.app;
-  const escape = app.set('json escape')
-  const replacer = app.set('json replacer');
-  const spaces = app.set('json spaces');
+  const escape = app.set("json escape")
+  const replacer = app.set("json replacer");
+  const spaces = app.set("json spaces");
   let body = stringify(val, replacer, spaces, escape)
-  let callback = this.req.query[app.set('jsonp callback name')];
+  let callback = this.req.query[app.set("jsonp callback name")];
 
   // content-type
-  if (!this.get('Content-Type')) {
-    this.set('X-Content-Type-Options', 'nosniff');
-    this.set('Content-Type', 'application/json');
+  if (!(this.get("Content-Type"))) {
+    this.set("X-Content-Type-Options", "nosniff");
+    this.set("Content-Type", "application/json");
   }
 
   // fixup callback
   if (Array.isArray(callback)) callback = callback[0];
 
   // jsonp
-  if (typeof callback === 'string' && callback.length !== 0) {
-    this.set('X-Content-Type-Options', 'nosniff');
-    this.set('Content-Type', 'text/javascript');
+  if (typeof callback === "string" && callback.length !== 0) {
+    this.set("X-Content-Type-Options", "nosniff");
+    this.set("Content-Type", "text/javascript");
 
     // restrict callback charset
-    callback = callback.replace(/[^\[\]\w$.]/g, '');
+    callback = callback.replace(/[^\[\]\w$.]/g, "");
 
     if (body === undefined) {
       // empty argument
-      body = ''
-    } else if (typeof body === 'string') {
+      body = ""
+    } else if (typeof body === "string") {
       // replace chars not allowed in JavaScript that are in JSON
-      body = body
-        .replace(/\u2028/g, '\\u2028')
-        .replace(/\u2029/g, '\\u2029')
+      body = body.replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
     }
 
     // the /**/ is a specific security mitigation for "Rosetta Flash JSONP abuse"
     // the typeof check is just to reduce client error noise
-    body = '/**/ typeof ' + callback + ' === \'function\' && ' + callback + '(' + body + ');';
+    body = "/**/ typeof " + callback + " === \'function\" && " + callback + "(' + body + ');";
   }
 
   return this.send(body);
@@ -620,10 +601,8 @@ res.jsonp = function jsonp(obj) {
 
 res.sendStatus = function sendStatus(statusCode) {
   const body = statuses.message[statusCode] || String(statusCode)
-
   this.statusCode = statusCode;
-  this.type('txt');
-
+  this.type("txt");
   return this.send(body);
 };
 
@@ -634,23 +613,17 @@ res.sendFile = function sendFile(path, options, callback) {
   let next = req.next;
   let opts = options || {};
 
-  if (!path) {
-    throw new TypeError('path argument is required to res.sendFile');
-  }
+  if (!path) throw new TypeError("path argument is required to res.sendFile");
 
-  if (typeof path !== 'string') {
-    throw new TypeError('path must be a string to res.sendFile')
-  }
+  if (typeof path !== "string") throw new TypeError("path must be a string to res.sendFile")
 
   // support function as second arg
-  if (typeof options === 'function') {
+  if (typeof options === "function") {
     done = options;
     opts = {};
   }
 
-  if (!opts.root && !isAbsolute(path)) {
-    throw new TypeError('path must be absolute or specify root to res.sendFile');
-  }
+  if (!opts.root && !isAbsolute(path)) throw new TypeError("path must be absolute or specify root to res.sendFile");
 
   // create file stream
   const pathname = encodeURI(path);
@@ -659,12 +632,10 @@ res.sendFile = function sendFile(path, options, callback) {
   // transfer
   sendfile(res, file, opts, function (err) {
     if (done) return done(err);
-    if (err && err.code === 'EISDIR') return next();
+    if (err && err.code === "EISDIR") return next();
 
     // next() all but write errors
-    if (err && err.code !== 'ECONNABORTED' && err.syscall !== 'write') {
-      next(err);
-    }
+    if (err && err.code !== "ECONNABORTED" && err.syscall !== "write") next(err);
   });
 };
 
@@ -674,25 +645,24 @@ res.download = function download(path, filename, options, callback) {
   let opts = options || null
 
   // support function as second or third arg
-  if (typeof filename === 'function') {
+  if (typeof filename === "function") {
     done = filename;
     name = null;
     opts = null
-  } else if (typeof options === 'function') {
+  } else if (typeof options === "function") {
     done = options
     opts = null
   }
 
   // support optional filename, where options may be in it's place
-  if (typeof filename === 'object' &&
-    (typeof options === 'function' || options === undefined)) {
+  if (typeof filename === "object" && (typeof options === "function" || options === undefined)) {
     name = null
     opts = filename
   }
 
   // set Content-Disposition when file is sent
   const headers = {
-    'Content-Disposition': contentDisposition(name || path)
+    "Content-Disposition": contentDisposition(name || path)
   };
 
   // merge user-provided headers
@@ -773,23 +743,20 @@ res.append = function append(field, val) {
 };
 
 res.set = res.header = function header(field: string|Record<string, string|string[]>, val?: string|string[]) {
-  if (typeof field === "string" && (typeof val === "string" || Array.isArray(val))) {
+  if (!(typeof field === "string" && (typeof val === "string" || Array.isArray(val)))) Object.keys(field).forEach(key => this.set(key, field[key]));
+  else {
     let value = Array.isArray(val) ? val.map(String) : String(val);
 
     // add charset to content-type
-    if (field.toLowerCase() === 'content-type') {
-      if (Array.isArray(value)) {
-        throw new TypeError('Content-Type cannot be set to an Array');
-      }
+    if (field.toLowerCase() === "content-type") {
+      if (Array.isArray(value)) throw new TypeError("Content-Type cannot be set to an Array");
       if (!charsetRegExp.test(value)) {
-        const charset = mime.charsets.lookup(value.split(';')[0], "");
-        if (charset) value += '; charset=' + charset.toLowerCase();
+        const charset = mime.charsets.lookup(value.split(";")[0], "");
+        if (charset) value += "; charset=" + charset.toLowerCase();
       }
     }
 
     this.setHeader(field, value);
-  } else {
-    Object.keys(field).forEach(key => this.set(key, field[key]));
   }
   return this;
 };
@@ -844,11 +811,8 @@ res.redirect = function redirect(url) {
   this.statusCode = status;
   this.set('Content-Length', Buffer.byteLength(body));
 
-  if (this.req.method === 'HEAD') {
-    this.end();
-  } else {
-    this.end(body);
-  }
+  if (this.req.method.toLowerCase() === "head") this.end();
+  else this.end(body);
 };
 
 res.vary = function(field){
@@ -965,27 +929,24 @@ function sendfile(res, file, options, callback) {
  * @private
  */
 
-function stringify (value, replacer, spaces, escape) {
+function stringify(value, replacer, spaces, escape) {
   // v8 checks arguments.length for optimizing simple call
   // https://bugs.chromium.org/p/v8/issues/detail?id=4730
-  let json = replacer || spaces
-    ? JSON.stringify(value, replacer, spaces)
-    : JSON.stringify(value);
-
-  if (escape && typeof json === 'string') {
+  let json = replacer || spaces ? JSON.stringify(value, replacer, spaces) : JSON.stringify(value);
+  if (escape && typeof json === "string") {
     json = json.replace(/[<>&]/g, function (c) {
       switch (c.charCodeAt(0)) {
         case 0x3c:
-          return '\\u003c'
+          return "\\u003c"
         case 0x3e:
-          return '\\u003e'
+          return "\\u003e"
         case 0x26:
-          return '\\u0026'
+          return "\\u0026"
         /* istanbul ignore next: unreachable default */
         default:
           return c
       }
-    })
+    });
   }
 
   return json

@@ -9,7 +9,7 @@ export const methods: Methods[] = Object.freeze(__methods) as any;
 
 export type RequestHandler = (req: Request, res: Response, next: (err?: any) => void) => void;
 export type ErrorRequestHandler = (error: any, req: Request, res: Response, next: (err?: any) => void) => void;
-export type Handler = RequestHandler|ErrorRequestHandler;
+export interface Handler extends RequestHandler, ErrorRequestHandler {};
 
 export class Layer {
   handle: Handler;
@@ -44,7 +44,6 @@ export class Layer {
           err.message = 'Failed to decode param \'' + val + '\'';
           err["status"] = err["statusCode"] = 400;
         }
-
         throw err;
       }
     }
@@ -93,15 +92,23 @@ export class Layer {
     return true;
   }
 
-  handle_request(req: Request, res: Response, next: (err?: any) => void) {
+  async handle_request(req: Request, res: Response, next: (err?: any) => void) {
     const fn = this.handle;
     if (fn.length > 3) return next();
-    Promise.resolve().then(async () => fn.call(this, req, res, next)).catch(err => next(err));
+    try {
+      await fn.apply(fn, arguments);
+    } catch (err) {
+      next(err);
+    }
   }
 
-  handle_error(err: any, req: Request, res: Response, next: (err?: any) => void) {
+  async handle_error(err: any, req: Request, res: Response, next: (err?: any) => void) {
     const fn = this.handle;
     if (fn.length !== 4) return next(err);
-    Promise.resolve().then(async () => fn.call(this, err, req, res, next)).catch(err => next(err));
+    try {
+      await fn.apply(fn, arguments);
+    } catch (err) {
+      next(err);
+    }
   }
 }
