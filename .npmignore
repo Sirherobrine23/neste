@@ -1,0 +1,9 @@
+# Node and IDEs
+.vscode/
+.github/
+*.tgz
+
+# Typescript
+*.tsbuildinfo
+src/**/*.ts
+!src/**/*.d.ts

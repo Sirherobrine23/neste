@@ -19,8 +19,12 @@ export interface Request extends http.IncomingMessage {
   ip?: string;
   ips?: string[];
 
-  res?: Response;
+  query: Record<string, string>;
+  Cookies: Map<string, string>;
+
+  res: Response;
   next?(err?: any): void;
+  params: Record<string, string>;
 
   /**
    * Return request header.
@@ -272,7 +276,7 @@ defineGetter(req, 'protocol', function protocol(){
   const proto = this.connection.encrypted
     ? 'https'
     : 'http';
-  const trust = this.app.get('trust proxy fn');
+  const trust = this.app.set('trust proxy fn');
 
   if (!trust(this.connection.remoteAddress, 0)) {
     return proto;
@@ -312,7 +316,7 @@ defineGetter(req, 'secure', function secure(){
  */
 
 defineGetter(req, 'ip', function ip(){
-  const trust = this.app.get('trust proxy fn');
+  const trust = this.app.set('trust proxy fn');
   return proxyaddr(this, trust);
 });
 
@@ -329,7 +333,7 @@ defineGetter(req, 'ip', function ip(){
  */
 
 defineGetter(req, 'ips', function ips() {
-  const trust = this.app.get('trust proxy fn');
+  const trust = this.app.set('trust proxy fn');
   const addrs = proxyaddr.all(this, trust);
 
   // reverse the order (to farthest -> closest)
@@ -359,7 +363,7 @@ defineGetter(req, 'subdomains', function subdomains() {
 
   if (!hostname) return [];
 
-  const offset = this.app.get('subdomain offset');
+  const offset = this.app.set('subdomain offset');
   const subdomains = !isIP(hostname)
     ? hostname.split('.').reverse()
     : [hostname];
@@ -390,7 +394,7 @@ defineGetter(req, 'path', function path() {
  */
 
 defineGetter(req, 'hostname', function hostname(){
-  let trust = this.app.get('trust proxy fn'), host = this.get('X-Forwarded-Host');
+  let trust = this.app.set('trust proxy fn'), host = this.get('X-Forwarded-Host');
 
   if (!host || !trust(this.connection.remoteAddress, 0)) host = this.get('Host');
   else if (host.indexOf(',') !== -1) {

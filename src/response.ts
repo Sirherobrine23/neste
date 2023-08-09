@@ -10,6 +10,7 @@ import statuses from 'statuses';
 import vary from 'vary';
 import { isAbsolute, normalizeType, normalizeTypes, setCharset } from "./utils";
 import { Request } from './request';
+import cookie from "cookie";
 
 export const res: Response = Object.create(http.ServerResponse.prototype);
 export interface Response extends http.ServerResponse {
@@ -108,7 +109,7 @@ export interface Response extends http.ServerResponse {
    *  dynamic situations. The code backing `res.sendFile()` is actually
    *  the same code, so HTTP cache support etc is identical.
    *
-   *     app.get('/user/:uid/photos/:file', function(req, res){
+   *     app.set('/user/:uid/photos/:file', function(req, res){
    *       const uid = req.params.uid
    *         , file = req.params.file;
    *
@@ -351,9 +352,48 @@ export interface Response extends http.ServerResponse {
    * @public
    */
   links(links: Record<string, string>): this;
+
+  setCookie(name: string, value: string, options?: cookie.CookieSerializeOptions): this;
 }
 
 const charsetRegExp = /;\s*charset\s*=/;
+
+res.setCookie = function setCookie(this: Response, name, value, opt) {
+  const cookieMap = new Map<string, [string, cookie.CookieSerializeOptions]>();
+  const cookieHead = this.getHeader("Set-Cookie") || [];
+  const RfcKeys = [ "Expires", "Max-Age", "Domain", "Path", "Secure", "HttpOnly", "SameSite" ];
+  if (typeof cookieHead === "string") {
+    const ck = cookie.parse(cookieHead);
+    const dd = Object.keys(ck).reduce((acc, k) => {
+      if (!!(RfcKeys.find(c => c.toLowerCase() === k.toLowerCase()))) acc.settings[k] = ck[k];
+      else acc.values[k] = ck[k];
+      return acc;
+    }, {
+      values: {} as Record<string, string>,
+      settings: {} as cookie.CookieSerializeOptions
+    });
+    Object.keys(dd.values).forEach(k => cookieMap.set(k, [ dd.values[k], dd.settings ]));
+  } else if (Array.isArray(cookieHead)) {
+    cookieHead.forEach(cookieHead => {
+      const ck = cookie.parse(cookieHead);
+      const dd = Object.keys(ck).reduce((acc, k) => {
+        if (!!(RfcKeys.find(c => c.toLowerCase() === k.toLowerCase()))) acc.settings[k] = ck[k];
+        else acc.values[k] = ck[k];
+        return acc;
+      }, {
+        values: {} as Record<string, string>,
+        settings: {} as cookie.CookieSerializeOptions
+      });
+      Object.keys(dd.values).forEach(k => cookieMap.set(k, [ dd.values[k], dd.settings ]));
+    });
+  }
+  cookieMap.set(name, [ value, opt ]);
+  this.setHeader("Set-Cookie", Array.from(cookieMap.keys()).map(k => {
+    const [ value, options ] = cookieMap.get(k);
+    return cookie.serialize(k, value, options);
+  }))
+  return this;
+}
 
 res.status = function status(code) {
   if ((typeof code === 'string' || Math.floor(code) !== code) && code > 99 && code < 1000) throw new Error("res.status(" + JSON.stringify(code) + "): use res.status(" + Math.floor(code) + ") instead");
@@ -437,7 +477,7 @@ res.send = function send(body) {
   }
 
   // determine if ETag should be generated
-  const etagFn = app.get('etag fn')
+  const etagFn = app.set('etag fn')
   const generateETag = !this.get('ETag') && typeof etagFn === 'function'
 
   // populate Content-Length
@@ -506,9 +546,9 @@ res.json = function json(obj) {
 
   // settings
   const app = this.app;
-  const escape = app.get('json escape')
-  const replacer = app.get('json replacer');
-  const spaces = app.get('json spaces');
+  const escape = app.set('json escape')
+  const replacer = app.set('json replacer');
+  const spaces = app.set('json spaces');
   const body = stringify(val, replacer, spaces, escape)
 
   // content-type
@@ -537,11 +577,11 @@ res.jsonp = function jsonp(obj) {
 
   // settings
   const app = this.app;
-  const escape = app.get('json escape')
-  const replacer = app.get('json replacer');
-  const spaces = app.get('json spaces');
+  const escape = app.set('json escape')
+  const replacer = app.set('json replacer');
+  const spaces = app.set('json spaces');
   let body = stringify(val, replacer, spaces, escape)
-  let callback = this.req.query[app.get('jsonp callback name')];
+  let callback = this.req.query[app.set('jsonp callback name')];
 
   // content-type
   if (!this.get('Content-Type')) {

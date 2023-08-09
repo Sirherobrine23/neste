@@ -29,6 +29,7 @@
     "@types/content-disposition": "^0.5.5",
     "@types/content-type": "^1.1.5",
     "@types/cookie": "^0.5.1",
+    "@types/finalhandler": "^1.2.0",
     "@types/node": "^20.4.6",
     "@types/proxy-addr": "^2.0.0",
     "@types/qs": "^6.9.7",
