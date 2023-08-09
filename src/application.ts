@@ -123,10 +123,10 @@ export class Router extends Function {
       const layer = stacks[stackX++];
       if (!layer) return done(err);
       else if (layer.method && layer.method !== method) return next(err);
-      else if (!(layer.match(req["path"]))) return next(err);
-      req["params"] = Object.assign({}, saveParms, layer.params);
-      req["path"] = req["path"].slice(layer.path.length)||layer.path;
-      layer.path = layer.params = undefined;
+      const layerMatch = layer.match(req["path"]);
+      if (!layerMatch) return next(err);
+      req["params"] = Object.assign({}, saveParms, layerMatch.params);
+      req["path"] = req["path"].slice(layerMatch.path.length)||layerMatch.path;
 
       if (err) layer.handle_error(err, req as any, res as any, next)
       else layer.handle_request(req as any, res as any, next);

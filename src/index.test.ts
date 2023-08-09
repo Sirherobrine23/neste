@@ -2,6 +2,8 @@ import neste from "./index";
 
 const app = neste();
 const app2 = neste.Router();
+
+app.get("/redirect", ({res}) => res.redirect("/"));
 app.get("/:google", (req, res) => {
   res.setCookie("test", String(Math.random()));
   res.setCookie("future", String(new Date(Date.now() + 1000 * 60 * 60 * 20)));
@@ -34,10 +36,9 @@ app.get("/throw2", async () => { throw new Error("From async throw 2"); });
 app.get("/throw", () => { throw new Error("From sync throw 1"); });
 app.get("/", (req, res) => {
   res.json({
-    stack: Array.isArray(req["app"].stack),
+    query: req.query  
   });
 });
-
 
 app.use((err, _req, res, _next) => res.status(500).json({
   err: (err.message || String(err)),

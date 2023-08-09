@@ -14,9 +14,7 @@ export interface Handler extends RequestHandler, ErrorRequestHandler {};
 export class Layer {
   handle: Handler;
   regexp: RegExp & { fast_star?: boolean; fast_slash?: boolean };
-  params: Record<string, any>;
   keys: Key[];
-  path: string;
 
   constructor(path: string|RegExp, fn: Handler, options?: TokensToRegexpOptions & ParseOptions) {
     if (!(typeof fn === "function")) throw new Error("Register function");
@@ -33,7 +31,7 @@ export class Layer {
    */
   method?: string;
 
-  match(path: string) {
+  match(path: string): undefined|{ path: string, params: Record<string, string> } {
     let match: string[];
     const decode_param = (val) => {
       if (typeof val !== 'string' || val.length === 0) return val;
@@ -47,49 +45,33 @@ export class Layer {
         throw err;
       }
     }
-    if (path != null) {
-      // fast path non-ending match for / (any path matches)
-      if (this.regexp.fast_slash) {
-        this.params = {}
-        this.path = ''
-        return true
-      }
 
-      // fast path for * (everything matched in a param)
-      if (this.regexp.fast_star) {
-        this.params = {'0': decode_param(path)};
-        this.path = path;
-        return true;
-      }
+    if (path !== null) {
+      // fast path non-ending match for / (any path matches)
+      if (this.regexp.fast_slash) return { path: "", params: {} };
+
+      // fast path for * (everything matche d in a param)
+      if (this.regexp.fast_star) return { path, params: {'0': decode_param(path)} };
 
       // match the path
       match = this.regexp.exec(path);
     }
 
-    if (!match) {
-      this.params = undefined;
-      this.path = undefined;
-      return false;
-    }
+    if (!match) return undefined;
 
     // store values
-    this.params = {};
-    this.path = match[0]
-
-    let keys = this.keys;
-    let params = this.params;
-
+    const params = {}, keys = this.keys;
     for (let i = 1; i < match.length; i++) {
-      let key = keys[i - 1];
-      let prop = key.name;
-      let val = decode_param(match[i])
-
-      if (val !== undefined || !(Object.hasOwnProperty.call(params, prop))) {
-        params[prop] = val;
-      }
+      const key = keys[i - 1];
+      const prop = key.name;
+      const val = decode_param(match[i])
+      if (val !== undefined || !(Object.hasOwnProperty.call(params, prop))) params[prop] = val;
     }
 
-    return true;
+    return {
+      path: match[0],
+      params
+    };
   }
 
   async handle_request(req: Request, res: Response, next: (err?: any) => void) {
