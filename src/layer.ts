@@ -51,7 +51,7 @@ export class Layer {
       if (this.regexp.fast_slash) return { path: "", params: {} };
 
       // fast path for * (everything matche d in a param)
-      if (this.regexp.fast_star) return { path, params: {'0': decode_param(path)} };
+      if (this.regexp.fast_star) return { path, params: {"0": decode_param(path)} };
 
       // match the path
       match = this.regexp.exec(path);
@@ -60,17 +60,16 @@ export class Layer {
     if (!match) return undefined;
 
     // store values
-    const params = {}, keys = this.keys;
-    for (let i = 1; i < match.length; i++) {
-      const key = keys[i - 1];
-      const prop = key.name;
-      const val = decode_param(match[i])
-      if (val !== undefined || !(Object.hasOwnProperty.call(params, prop))) params[prop] = val;
-    }
-
+    const __path = match[0], keys = this.keys;
+    match = Array.from(match).slice(1);
     return {
-      path: match[0],
-      params
+      path: __path,
+      params: keys.reduce((acc, key, i) => {
+        const prop = key.name;
+        const val = decode_param(match[i]);
+        if (!(val === undefined || Object.hasOwnProperty.call(acc, prop))) acc[prop] = val;
+        return acc;
+      }, match.reduce((acc, v, index) => { const val = decode_param(v); if (val !== undefined) acc[String(index)] = v; return acc; }, {})),
     };
   }
 

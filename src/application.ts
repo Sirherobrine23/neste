@@ -97,9 +97,7 @@ export class Router extends Function {
     const CookiesStorage = new Map<string, string>();
     if (typeof req.headers.cookie === "string") {
       const parsed = cookie.parse(req.headers.cookie);
-      Object.keys(parsed).forEach(k => {
-        if (parsed[k]) CookiesStorage.set(k, parsed[k]);
-      });
+      Object.keys(parsed).forEach(k => CookiesStorage.set(k, parsed[k]));
     }
     setPrototypeOf(res, Object.create(this.response, {}));
     setPrototypeOf(req, Object.create(this.request, {
@@ -126,7 +124,7 @@ export class Router extends Function {
       const layerMatch = layer.match(req["path"]);
       if (!layerMatch) return next(err);
       req["params"] = Object.assign({}, saveParms, layerMatch.params);
-      req["path"] = req["path"].slice(layerMatch.path.length)||layerMatch.path;
+      req["path"] = req["path"].slice(layerMatch.path.length) || layer.method && layerMatch.path || "/";
 
       if (err) layer.handle_error(err, req as any, res as any, next)
       else layer.handle_request(req as any, res as any, next);

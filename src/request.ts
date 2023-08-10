@@ -1,14 +1,17 @@
 import accepts from "accepts";
 import http from "http";
 import { isIP } from "net";
-import { parse } from "url";
 import proxyaddr from "proxy-addr";
 import parseRange from "range-parser";
 import typeis from "type-is";
+import { parse } from "url";
 import { Response } from "./response";
+import { defineGetter } from "./utils";
 
 export const req: Request = Object.create(http.IncomingMessage.prototype);
 export interface Request extends http.IncomingMessage {
+  res: Response;
+  next(err?: any): void;
   protocol: "https"|"http";
   secure: boolean;
   path: string;
@@ -22,10 +25,8 @@ export interface Request extends http.IncomingMessage {
 
   query: Record<string, string>;
   Cookies: Map<string, string>;
-
-  res: Response;
-  next?(err?: any): void;
   params: Record<string, string>;
+  body?: any;
 
   /**
    * Return request header.
@@ -144,7 +145,7 @@ export interface Request extends http.IncomingMessage {
    * NOTE: remember that ranges are inclusive, so for example "Range: users=0-3"
    * should respond with 4 users when available, not 3.
    */
-  range(size: number, options?: any): number|any[];
+  range(size: number, options?: parseRange.Options): parseRange.Result | parseRange.Ranges;
 
   /**
    * Return the value of param `name` when present or `defaultValue`.
@@ -229,8 +230,8 @@ req.acceptsLanguages = function(){
 };
 
 req.range = function range(size, options) {
-  const range = this.get('Range');
-  if (!range) return;
+  const range = this.get("Range");
+  if (!range) return undefined;
   return parseRange(size, range, options);
 };
 
@@ -431,23 +432,7 @@ defineGetter(req, 'stale', function stale(){
  * @public
  */
 
-defineGetter(req, 'xhr', function xhr(){
-  const val = this.get('X-Requested-With') || '';
-  return val.toLowerCase() === 'xmlhttprequest';
+defineGetter(req, "xhr", function xhr(){
+  const val = String(this.get("X-Requested-With") || "");
+  return val.toLowerCase() === "xmlhttprequest";
 });
-
-/**
- * Helper function for creating a getter on an object.
- *
- * @param {Object} obj
- * @param {String} name
- * @param {Function} getter
- * @private
- */
-function defineGetter(obj, name, getter) {
-  Object.defineProperty(obj, name, {
-    configurable: true,
-    enumerable: true,
-    get: getter
-  });
-}

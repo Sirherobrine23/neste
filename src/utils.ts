@@ -83,6 +83,22 @@ export function flatten<T extends any[]>(args: T): FlatArray<T> {
 };
 
 /**
+ * Helper function for creating a getter on an object.
+ *
+ * @param {Object} obj
+ * @param {String} name
+ * @param {Function} getter
+ * @private
+ */
+export function defineGetter<T = any>(obj: any, name: string, getter: (this: T, ...args: any[]) => void) {
+  Object.defineProperty(obj, name, {
+    configurable: true,
+    enumerable: true,
+    get: getter
+  });
+}
+
+/**
  * Normalize the given `type`, for example "html" becomes "text/html".
  *
  * @param {String} type

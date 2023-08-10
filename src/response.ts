@@ -4,13 +4,13 @@ import encodeUrl from "encodeurl";
 import escapeHtml from "escape-html";
 import http from "http";
 import createError from "http-errors";
-import onFinished from "on-finished";
 import { extname, resolve } from "path";
 import send, { mime } from "send";
 import statuses from "statuses";
 import vary from "vary";
 import { Request } from "./request";
 import { isAbsolute, normalizeType, normalizeTypes, setCharset } from "./utils";
+import { finished } from "stream";
 
 export const res: Response = Object.create(http.ServerResponse.prototype);
 export interface Response extends http.ServerResponse {
@@ -776,7 +776,7 @@ res.location = function location(url) {
   return this.set('Location', encodeUrl(loc));
 };
 
-res.redirect = function redirect(url) {
+res.redirect = function redirect(this: Response, url) {
   let address = url, body, status = 302;
 
   // allow status / url
@@ -796,20 +796,18 @@ res.redirect = function redirect(url) {
     text: function(){
       body = statuses.message[status] + '. Redirecting to ' + address
     },
-
     html: function(){
-      const u = escapeHtml(address);
-      body = '<p>' + statuses.message[status] + '. Redirecting to <a href="' + u + '">' + u + '</a></p>'
+      const u = escapeHtml(String(address));
+      body = "<p>" + statuses.message[status] + ". Redirecting to <a href=\"" + u + "\">" + u + "</a></p>"
     },
-
     default: function(){
-      body = '';
+      body = "";
     }
   });
 
   // Respond
   this.statusCode = status;
-  this.set('Content-Length', Buffer.byteLength(body));
+  this.set("Content-Length", String(Buffer.byteLength(body)));
 
   if (this.req.method.toLowerCase() === "head") this.end();
   else this.end(body);
@@ -817,13 +815,8 @@ res.redirect = function redirect(url) {
 
 res.vary = function(field){
   // checks for back-compat
-  if (!field || (Array.isArray(field) && !field.length)) {
-    throw new Error('res.vary(): Provide a field name');
-    return this;
-  }
-
+  if (!field || (Array.isArray(field) && !field.length)) throw new Error("res.vary(): Provide a field name");
   vary(this, field);
-
   return this;
 };
 
@@ -898,7 +891,7 @@ function sendfile(res, file, options, callback) {
   file.on('error', onerror);
   file.on('file', onfile);
   file.on('stream', onstream);
-  onFinished(res, onfinish);
+  finished(res, onfinish);
 
   if (options.headers) {
     // set headers on successful transfer

@@ -3,7 +3,7 @@ import neste from "./index";
 const app = neste();
 const app2 = neste.Router();
 
-app.get("/redirect", ({res}) => res.redirect("/"));
+app.use("/local", neste.staticFile("./"));
 app.get("/:google", (req, res) => {
   res.setCookie("test", String(Math.random()));
   res.setCookie("future", String(new Date(Date.now() + 1000 * 60 * 60 * 20)));
@@ -31,12 +31,12 @@ app.get("/:google", (req, res) => {
 });
 app.use("/:app2", app2);
 app2.get("/ok", (req, res) => res.json({ app2: true, params: req.params }));
-app2.get("/(.*)", (req, res) => res.json({ app2: true, params: req.params }));
+app2.get("/:app(.*)", (req, res) => res.json({ app2: true, params: req.params }));
 app.get("/throw2", async () => { throw new Error("From async throw 2"); });
 app.get("/throw", () => { throw new Error("From sync throw 1"); });
 app.get("/", (req, res) => {
   res.json({
-    query: req.query  
+    query: req.query
   });
 });
 
