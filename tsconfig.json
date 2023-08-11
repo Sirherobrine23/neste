@@ -19,6 +19,9 @@
     ]
   },
   "exclude": [
+    "export/**",
+    "**/*.cjs",
+    "**/*.mjs",
     "**/*.test.ts",
     "**/testLocal/**",
     "**/node_modules/**"

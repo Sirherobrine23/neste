@@ -1,3 +1,4 @@
+import { constants as bufferConstants } from "buffer";
 import busboy from "busboy";
 import fs from "fs";
 import path from "path";
@@ -49,8 +50,41 @@ export class LocalFile extends Map<string, FileStorage> {
 
 export type ParseBodyOptions = {
   formData?: {
-    tmpFolder?: string;
+    /**
+     * Create custom upload file
+     *
+     * example to Aws Bucket, Oracle buckets or same Google Driver
+     *
+     * if this function is present, `tmpFolder` will be ignored
+     *
+     * @argument fileStream - File stream
+     * @argument info - File info (Not include file size!)
+     * @argument fn - on complete file manipulation call callback with file info to storage in body
+     */
     fileUpload?: (fileStream: stream.Readable, info: { name: string, filename: string, mimeType: string }, fn: (err: any, callbacks: FileStorage) => void) => void;
+
+    /**
+     * **Dont use this with fileUpload function**
+     *
+     * Storage request files localy in tmp folder
+     *
+     * in each request generate a folder with a random name [(at a glance how mkdtemp how works)](https://nodejs.org/api/fs.html#fsmkdtempprefix-options-callback) and save the files there
+     */
+    tmpFolder?: string;
+  };
+  formEncoded?: {
+    /**
+     * set body limit
+     *
+     * @description half of `MAX_LENGTH` from `Buffer.constants`
+     */
+    limit?: number;
+    /**
+     * if the body reaches the maximum size, it will respond to the client with a 400 error
+     *
+     * @default true
+     */
+    limitResponse?: boolean;
   }
 };
 
@@ -58,20 +92,36 @@ export function parseBody(options?: ParseBodyOptions): RequestHandler {
   return async (req, res, next) => {
     options = (options || {});
     if (req.body !== undefined) return next();
-    if (req.is("application/json")) {
+    if (req.is("application/json") || req.is("application/x-www-form-urlencoded")) {
+      const isJSON = !!req.is("application/json");
+      let limit = (options.formEncoded||{}).limit;
+      let limitResponse = (options.formEncoded||{}).limitResponse;
+      if (limit === undefined) limit = Math.floor(bufferConstants.MAX_LENGTH / 2);
+      if (limitResponse === undefined) limitResponse = true;
       let chuckBuff = Buffer.from([]);
-      await finished(req.on("data", chuck => chuckBuff = Buffer.concat([chuckBuff, chuck])));
-      req.body = JSON.parse(chuckBuff.toString("utf8"));
-      next();
-    } else if (req.is("application/x-www-form-urlencoded")) {
-      let chuckBuff = Buffer.from([]);
-      await finished(req.on("data", chuck => chuckBuff = Buffer.concat([chuckBuff, chuck])));
-      console.log(chuckBuff.toString());
-      const bodySearch = new URLSearchParams(chuckBuff.toString("utf8"));
-      req.body = Array.from(bodySearch.keys()).reduce<Record<string, string>>((acc, keyName) => {
-        acc[keyName] = decodeURIComponent(bodySearch.get(keyName));
-        return acc;
-      }, {});
+      let callLimit = false;
+      await finished(req.on("data", function concatBuff(chuck) {
+        chuckBuff = Buffer.concat([chuckBuff, chuck]);
+        if ((limit !== Infinity && limit > 0) && Buffer.byteLength(chuckBuff) >= limit) {
+          req.removeListener("data", concatBuff);
+          req.push(null);
+          if (limitResponse) {
+            callLimit = true;
+            res.status(400).json({ message: "Body limit rate" });
+            chuckBuff = null;
+          }
+        }
+      }));
+      if (callLimit) return next("router"); // end call's
+      if (isJSON) req.body = JSON.parse(chuckBuff.toString("utf8"));
+      else {
+        const bodySearch = new URLSearchParams(chuckBuff.toString("utf8"));
+        req.body = Array.from(bodySearch.keys()).reduce<Record<string, string>>((acc, keyName) => {
+          acc[keyName] = decodeURIComponent(bodySearch.get(keyName));
+          return acc;
+        }, {});
+      }
+      chuckBuff = null;
       next();
     } else if (req.is("multipart/form-data")) {
       if (!options.formData) return next();
@@ -115,9 +165,8 @@ export function parseBody(options?: ParseBodyOptions): RequestHandler {
           return end();
         }, err => parse.emit("error", err));
       });
-      req.pipe(parse);
-      return;
+      return req.pipe(parse);
     }
-    next();
+    return next();
   };
 }
