@@ -1,0 +1,28 @@
+name: Teste
+on:
+  pull_request:
+  push:
+
+jobs:
+  test:
+    runs-on: "ubuntu-latest"
+    strategy:
+      matrix:
+        node:
+          - 20.x
+          - 19.x
+          - 18.x
+          - 17.x
+          - 16.x
+          - 15.x
+          - 14.x
+    name: "Test in node ${{ matrix.node }}"
+    steps:
+    - name: Clone repo
+      uses: actions/checkout@v3.5.3
+    - name: Install node
+      uses: actions/setup-node@v3.7.0
+      with:
+        node-version: ${{ matrix.node }}
+    - run: npm install --no-save
+    - run: npm pack

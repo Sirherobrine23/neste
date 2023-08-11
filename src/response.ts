@@ -7,10 +7,10 @@ import createError from "http-errors";
 import { extname, resolve } from "path";
 import send, { mime } from "send";
 import statuses from "statuses";
+import { finished } from "stream";
 import vary from "vary";
 import { Request } from "./request";
 import { isAbsolute, normalizeType, normalizeTypes, setCharset } from "./utils";
-import { finished } from "stream";
 
 export const res: Response = Object.create(http.ServerResponse.prototype);
 export interface Response extends http.ServerResponse {

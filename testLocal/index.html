@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Send file test</title>
+</head>
+<body>
+  <div>
+    <h1>application/x-www-form-urlencoded</h1>
+    <form action="/" method="post">
+      <input type="file" name="file" id="file">
+      <br/>
+      <input type="input" name="text" id="text">
+      <br/>
+      <button type="submit">Send</button>
+    </form>
+  </div>
+  <hr/>
+  <div>
+    <h1>multipart/form-data</h1>
+    <div>
+      <div id="toAdd"></div>
+      <br/>
+      <hr/>
+      <button onclick="insert()">Add</button>
+      <button onclick="sendForm()">Send</button>
+      <hr/>
+      <span>Result:</span>
+      <br/>
+      <pre id="formRes"></pre>
+      <script>
+        const apends = [];
+        function sendForm() {
+          document.getElementById("formRes").innerHTML = "Uploading...";
+          const ff = new FormData();
+          for (const f of apends) ff.append(f.getAttribute("name"), Array.from(f.files).at(0));
+          fetch("/", {
+            method: "POST",
+            body: ff
+          }).then(res => res.text()).then(data => document.getElementById("formRes").innerHTML = data);
+        }
+        function insert() {
+          const div = document.createElement("p");
+          const input = document.createElement("input");
+          div.appendChild(input);
+          input.onchange = () => {
+            if (!input) return;
+            if (Array.from(input.files).length > 0) {
+              input.onchange = undefined;
+              insert();
+            }
+          }
+
+          input.setAttribute("type", "file");
+          input.setAttribute("name", "file" + (Math.random() ** 2));
+
+          document.getElementById("toAdd").appendChild(div);
+          apends.push(input);
+        }
+        insert();
+      </script>
+    </div>
+  </div>
+</body>
+</html>

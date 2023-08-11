@@ -90,7 +90,7 @@ export function flatten<T extends any[]>(args: T): FlatArray<T> {
  * @param {Function} getter
  * @private
  */
-export function defineGetter<T = any>(obj: any, name: string, getter: (this: T, ...args: any[]) => void) {
+export function defineGetter<T extends Record<string, any>, C extends string>(obj: T, name: C, getter: (this: T, ...args: Parameters<T[C]>) => void) {
   Object.defineProperty(obj, name, {
     configurable: true,
     enumerable: true,

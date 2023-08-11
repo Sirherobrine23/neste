@@ -7,6 +7,7 @@ export function staticFile(folderPath: string): RequestHandler {
   folderPath = path.resolve(process.cwd(), folderPath);
   if (!(fs.existsSync(folderPath))) throw new Error("Set valid foldwr");
   return (req, res, next) => {
+    if (req.method.toLowerCase() !== "get") return next();
     const localFile = path.join(folderPath, req.path.substring(1));
     if (!(localFile.startsWith(folderPath))) return res.status(400).json({ error: "Invalid request file" });
     if (!(fs.existsSync(localFile))) return next();
@@ -15,6 +16,15 @@ export function staticFile(folderPath: string): RequestHandler {
       if (stats.isDirectory()) {
         fs.readdir(localFile, (err, files) => {
           if (err) return next(err);
+          let file: string;
+          if ((file = files.find(v => ([ "index.html", "index.htm" ]).includes(v)))) {
+            fs.lstat(path.join(localFile, file), (err, stats) => {
+              if (err) return next(err);
+              res.set("Content-Length", String(stats.size));
+              pipeline(fs.createReadStream(path.join(localFile, file)), res.status(200), (err) => err ? next(err) : null);
+            });
+            return;
+          }
           res.json(files);
         });
       } else {

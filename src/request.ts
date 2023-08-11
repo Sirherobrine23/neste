@@ -183,7 +183,7 @@ export interface Request extends http.IncomingMessage {
    *      // => false
    *
    */
-  is(args: string[]): String|false|null;
+  is(args: (string[])|string): boolean|string;
 }
 
 req.get = req.header = function header(name) {
@@ -257,7 +257,7 @@ req.is = function is(types) {
     }
   }
 
-  return typeis(this, arr);
+  return typeis(this, arr as any[]);
 };
 
 /**
@@ -274,7 +274,7 @@ req.is = function is(types) {
  * @public
  */
 
-defineGetter(req, "protocol", function protocol(this:Request){
+defineGetter(req, "protocol", function protocol() {
   const proto = (this.socket || this.connection)["encrypted"] ? "https" : "http";
   const trust = this["app"].set('trust proxy fn');
 
@@ -301,7 +301,7 @@ defineGetter(req, "protocol", function protocol(this:Request){
  * @public
  */
 
-defineGetter(req, 'secure', function secure(){
+defineGetter(req, 'secure', function secure() {
   return this.protocol === 'https';
 });
 
@@ -315,8 +315,8 @@ defineGetter(req, 'secure', function secure(){
  * @public
  */
 
-defineGetter(req, 'ip', function ip(){
-  const trust = this.app.set('trust proxy fn');
+defineGetter(req, 'ip', function ip() {
+  const trust = this["app"].set('trust proxy fn');
   return proxyaddr(this, trust);
 });
 
@@ -333,7 +333,7 @@ defineGetter(req, 'ip', function ip(){
  */
 
 defineGetter(req, 'ips', function ips() {
-  const trust = this.app.set('trust proxy fn');
+  const trust = this["app"].set('trust proxy fn');
   const addrs = proxyaddr.all(this, trust);
 
   // reverse the order (to farthest -> closest)
@@ -363,7 +363,7 @@ defineGetter(req, 'subdomains', function subdomains() {
 
   if (!hostname) return [];
 
-  const offset = this.app.set('subdomain offset');
+  const offset = this["app"].set('subdomain offset');
   const subdomains = !isIP(hostname)
     ? hostname.split('.').reverse()
     : [hostname];
@@ -379,7 +379,7 @@ defineGetter(req, 'subdomains', function subdomains() {
  */
 
 defineGetter(req, 'path', function path() {
-  return parse(this).pathname;
+  return parse(this.url).pathname;
 });
 
 /**
@@ -394,7 +394,7 @@ defineGetter(req, 'path', function path() {
  */
 
 defineGetter(req, 'hostname', function hostname(){
-  let trust = this.app.set('trust proxy fn'), host = this.get('X-Forwarded-Host');
+  let trust = this["app"].set('trust proxy fn'), host = this.get('X-Forwarded-Host');
 
   if (!host || !trust(this.connection.remoteAddress, 0)) host = this.get('Host');
   else if (host.indexOf(',') !== -1) {
@@ -403,7 +403,7 @@ defineGetter(req, 'hostname', function hostname(){
     host = host.substring(0, host.indexOf(',')).trimRight()
   }
 
-  if (!host) return;
+  if (!host) return undefined;
 
   // IPv6 literal support
   const offset = host[0] === '[' ? host.indexOf(']') + 1 : 0;
@@ -413,26 +413,13 @@ defineGetter(req, 'hostname', function hostname(){
 });
 
 /**
- * Check if the request is stale, aka
- * "Last-Modified" and / or the "ETag" for the
- * resource has changed.
- *
- * @return {Boolean}
- * @public
- */
-
-defineGetter(req, 'stale', function stale(){
-  return !this.fresh;
-});
-
-/**
  * Check if the request was an _XMLHttpRequest_.
  *
  * @return {Boolean}
  * @public
  */
 
-defineGetter(req, "xhr", function xhr(){
+defineGetter(req, "xhr", function xhr() {
   const val = String(this.get("X-Requested-With") || "");
   return val.toLowerCase() === "xmlhttprequest";
 });
