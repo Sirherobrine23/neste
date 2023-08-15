@@ -1,0 +1,38 @@
+name: Publish neste
+on:
+  release:
+    types:
+    - released
+    - prereleased
+
+jobs:
+  pack_package:
+    runs-on: ubuntu-latest
+    name: Publish neste
+    env:
+      PACKAGE_VERSION: ${{ github.ref }}
+    steps:
+    - uses: actions/checkout@v3
+      name: Code checkout
+
+    - uses: actions/setup-node@v3
+      name: Setup node.js
+      with:
+        node-version: 18.x
+        registry-url: https://registry.npmjs.org/
+
+    - name: Edit version and install depencies
+      run: |
+        sudo npm i -g semver
+        VERSION="$(semver -c ${{ github.ref_name }})"
+        echo "PACKAGE_VERSION=$VERSION" >> $GITHUB_ENV
+        jq --arg ver $VERSION '.version = $ver' package.json > package2.json
+        mv -fv package2.json package.json
+
+        # Install depencides and build
+        npm install --no-save
+
+    # Publish npm
+    - run: npm publish --access public --tag ${{ github.event.release.prerelease && 'next' || 'latest' }}
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}

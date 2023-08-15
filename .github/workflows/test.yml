@@ -26,3 +26,4 @@ jobs:
         node-version: ${{ matrix.node }}
     - run: npm install --no-save
     - run: npm pack
+      name: Transpiler and Pack
