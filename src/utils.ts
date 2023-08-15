@@ -5,7 +5,7 @@ import qs from "qs";
 import { mime } from "send";
 export { contentDisposition };
 
-const __methods = [ "get", "head", "post", "put", "delete", "connect", "options", "trace" ] as const;
+const __methods = [ "ws", "get", "post", "put", "delete", "head", "connect", "options", "trace" ] as const;
 export type Methods = typeof __methods[number];
 export const methods: Methods[] = Object.freeze(__methods) as any;
 

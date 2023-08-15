@@ -7,7 +7,7 @@
   "type": "commonjs",
   "main": "./export/index.cjs",
   "module": "./export/index.mjs",
-  "types": "./export/index.d.cjs",
+  "types": "./export/index.d.ts",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Sirherobrine23/neste.git"
@@ -50,6 +50,7 @@
     "@types/send": "^0.17.1",
     "@types/type-is": "^1.6.3",
     "@types/vary": "^1.1.0",
+    "@types/ws": "^8.5.5",
     "ts-node": "^10.9.1",
     "typescript": "^5.1.6"
   },
@@ -65,6 +66,7 @@
     "qs": "^6.11.2",
     "send": "^0.18.0",
     "type-is": "^1.6.18",
-    "vary": "^1.1.2"
+    "vary": "^1.1.2",
+    "ws": "^8.13.0"
   }
 }

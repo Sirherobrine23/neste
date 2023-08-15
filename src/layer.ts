@@ -2,14 +2,12 @@ import { Key, TokensToRegexpOptions, pathToRegexp } from "path-to-regexp";
 import { ParseOptions } from "querystring";
 import { Request } from "./request";
 import { Response } from "./response";
+import { WebSocket } from "ws";
 
-const __methods = [ "get", "head", "post", "put", "delete", "connect", "options", "trace" ] as const;
-export type Methods = typeof __methods[number];
-export const methods: Methods[] = Object.freeze(__methods) as any;
-
-export type RequestHandler = (req: Request, res: Response, next: (err?: any) => void) => void;
 export type ErrorRequestHandler = (error: any, req: Request, res: Response, next: (err?: any) => void) => void;
-export interface Handler extends RequestHandler, ErrorRequestHandler {};
+export type WsRequestHandler = (req: Request, socket: WebSocket, next: (err?: any) => void) => void;
+export type RequestHandler = (req: Request, res: Response, next: (err?: any) => void) => void;
+export interface Handler extends RequestHandler, ErrorRequestHandler, WsRequestHandler {};
 
 export class Layer {
   handle: Handler;

@@ -6,11 +6,11 @@ import { isIPv6 } from "net";
 import { resolve as pathResolve } from "path/posix";
 import { parse } from "url";
 import nodeUtil from "util";
-import { ErrorRequestHandler, Handler, Layer, RequestHandler } from "./layer";
+import { ErrorRequestHandler, Handler, Layer, RequestHandler, WsRequestHandler } from "./layer";
 import { Request, req as __req } from "./request";
 import { Response, res as __res } from "./response";
 import { compileQueryParser, compileTrust, methods, mixin, setPrototypeOf } from "./utils";
-
+import wss, { WebSocket } from "ws";
 export type { Handler };
 
 const trustProxyDefaultSymbol = '@@symbol:trust_proxy_default';
@@ -23,7 +23,9 @@ function __RouterHandler__(this: Router, req: IncomingMessage, res: ServerRespon
 }
 
 export interface Router {
+  (req: IncomingMessage, socket: WebSocket, next: (err?: any) => void): void;
   (req: IncomingMessage, res: ServerResponse, next: (err?: any) => void): void;
+  ws(path: string|RegExp, ...fn: WsRequestHandler[]): this;
   get(path: string|RegExp, ...fn: RequestHandler[]): this;
   put(path: string|RegExp, ...fn: RequestHandler[]): this;
   head(path: string|RegExp, ...fn: RequestHandler[]): this;
@@ -82,11 +84,10 @@ export class Router extends Function {
    * @param res - Response socket from http, https server
    * @param next - Handler request
    */
-  handler(req: IncomingMessage, res: ServerResponse, done?: (err?: any) => void): void {
+  handler(req: IncomingMessage, res: ServerResponse|WebSocket, done?: (err?: any) => void): void {
     if (!(this instanceof Router)) throw new Error("Cannot access class");
-    if (done === undefined) done = finalhandler(req, res, { env: this.set("env"), onerror: (err) => { if (this.set("env") !== "test") console.error(err.stack || err.toString()); } });
     if (this.stacks.length === 0) return done();
-    const method = req.method = typeof req.method === "string" ? req.method.toLowerCase() : req.method;
+    const method = req.method = res instanceof WebSocket ? "ws" : typeof req.method === "string" ? req.method.toLowerCase() : req.method;
     req["res"] = res;
     // @ts-ignore
     res["req"] = req;
@@ -99,14 +100,21 @@ export class Router extends Function {
       const parsed = cookie.parse(req.headers.cookie);
       Object.keys(parsed).forEach(k => CookiesStorage.set(k, parsed[k]));
     }
-    setPrototypeOf(res, Object.create(this.response, {}));
     setPrototypeOf(req, Object.create(this.request, {
       query: { configurable: true, enumerable: true, writable: true, value: Array.from(parseQuery.keys()).reduce<Record<string, string>>((acc, key) => { acc[key] = parseQuery.get(key); return acc; }, {}) },
       ipPort: { configurable: false, enumerable: false, writable: false, value: req.socket.remoteAddress ? (isIPv6(req.socket.remoteAddress) ? `[${req.socket.remoteAddress}]:${req.socket.remotePort}` : `${req.socket.remoteAddress}:${req.socket.remotePort}`) : undefined },
       method: { configurable: false, enumerable: false, writable: false, value: method },
       Cookies: { configurable: true, enumerable: true, writable: true, value: CookiesStorage },
     }));
-    res["locals"] = res["locals"] || Object.create(null);
+
+    if (!(res instanceof WebSocket)) {
+      if (done === undefined) done = finalhandler(req, res, { env: this.set("env"), onerror: (err) => { if (this.set("env") !== "test") console.error(err.stack || err.toString()); } });
+      setPrototypeOf(res, Object.create(this.response, {}));
+      res["locals"] = res["locals"] || Object.create(null);
+    } else {
+      if (done === undefined) done = () => res.close(404);
+      req.on("close", () => {});
+    }
 
     let stackX = 0;
     const { stacks } = this;
@@ -235,7 +243,10 @@ export class Neste extends Router {
 }
 
 Neste.prototype.listen = function (this: Neste) {
+  const self = this;
+  const wsServer = new wss.Server({ noServer: true });
   const server = createServer();
   server.on("request", this.handler.bind(this));
+  server.on("upgrade", (req, sock, head) => wsServer.handleUpgrade(req, sock, head, (client) => self.handler(req, client)));
   return server.listen.apply(server, arguments);
 }

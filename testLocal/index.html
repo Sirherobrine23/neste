@@ -7,6 +7,53 @@
 </head>
 <body>
   <div>
+    <h1>WebSocket</h1>
+    <div>
+      <span>Status: <span id="wsConnect">Disconnected</span></span>
+      <button onclick="connectWs()">Connect</button>
+      <br/>
+      <div>
+        <input type="text" id="textInput">
+        <button id="sendSocket">Send</button>
+      </div>
+      <br/>
+      <div id="wsRes"></div>
+      <br/>
+    </div>
+    <script>
+      function connectWs() {
+        const wsConnection = new WebSocket("ws://"+window.location.host);
+        wsConnection.onerror = (err) => document.getElementById("wsConnect").innerHTML = String(err);
+        wsConnection.onopen = () => {
+          document.getElementById("wsRes").innerHTML = "";
+          document.getElementById("wsConnect").innerHTML = "Opened";
+        }
+        wsConnection.onclose = () => document.getElementById("wsConnect").innerHTML = "Disconnected";
+        wsConnection.onmessage = async (e) => {
+          console.log(e);
+          if (!e.data) return;
+          if (typeof e.data === "string") {
+            const sp = document.createElement("span");
+            sp.innerHTML = e.data;
+            document.getElementById("wsRes").appendChild(sp);
+            document.getElementById("wsRes").appendChild(document.createElement("br"));
+          } else if (e.data instanceof Blob) {
+            const sp = document.createElement("span");
+            sp.innerHTML = (new TextDecoder("utf-8")).decode(await e.data.arrayBuffer());
+            document.getElementById("wsRes").appendChild(sp);
+            document.getElementById("wsRes").appendChild(document.createElement("br"));
+          }
+        };
+        document.getElementById("sendSocket").onclick = () => {
+          const v = document.getElementById("textInput").value;
+          document.getElementById("textInput").value = "";
+          wsConnection.send(v);
+        }
+      }
+    </script>
+  </div>
+  <hr/>
+  <div>
     <h1>application/x-www-form-urlencoded</h1>
     <form action="/" method="post">
       <input type="file" name="file" id="file">
