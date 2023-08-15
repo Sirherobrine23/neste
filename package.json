@@ -1,13 +1,20 @@
 {
   "name": "neste",
   "description": "a express fork",
-  "version": "2.0.0",
+  "version": "2.0.2",
   "author": "Matheus Sampaio Queiroga <srherobrine20@gmail.com>",
   "license": "MIT",
   "type": "commonjs",
-  "main": "./export/index.cjs",
-  "module": "./export/index.mjs",
+  "main": "./export/index.js",
   "types": "./export/index.d.ts",
+  "default": "./export/index.mjs",
+  "exports": {
+    ".": {
+      "require": "./export/index.js",
+      "default": "./export/index.mjs",
+      "types": "./export/index.d.ts"
+    }
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Sirherobrine23/neste.git"
