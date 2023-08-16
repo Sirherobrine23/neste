@@ -9,8 +9,9 @@
   <div>
     <h1>WebSocket</h1>
     <div>
-      <span>Status: <span id="wsConnect">Disconnected</span></span>
       <button onclick="connectWs()">Connect</button>
+      <button id="closeWs">Disconnect</button>
+      <span>Status: <span id="wsConnect">Disconnected</span></span>
       <br/>
       <div>
         <input type="text" id="textInput">
@@ -25,6 +26,7 @@
         const wsConnection = new WebSocket("ws://"+window.location.host);
         wsConnection.onerror = (err) => document.getElementById("wsConnect").innerHTML = String(err);
         wsConnection.onopen = () => {
+          document.getElementById("closeWs").onclick = () => wsConnection.close();
           document.getElementById("wsRes").innerHTML = "";
           document.getElementById("wsConnect").innerHTML = "Opened";
         }

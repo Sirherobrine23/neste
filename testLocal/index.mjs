@@ -1,10 +1,8 @@
-const { randomBytes } = require("crypto");
-const neste = require("../export/index.cjs");
-const path = require("path");
+import { randomBytes } from "crypto";
+import neste from "../export/index.mjs";
 const app = neste();
 
 app.listen(3000, () => console.log("Listen on %s", 3000));
-app.use(neste.staticFile(__dirname), neste.parseBody({ formData: { tmpFolder: path.join(__dirname, "localUpload") } }));
 app.post("/", async (req, res) => {
   console.log(req.body);
   res.json({
@@ -31,6 +29,3 @@ app.ws("/", (req, res) => {
     res.send(randomBytes(8));
   };
 });
-
-app.use((req, res, next) => res.status(404).json({ error: "Path not exists" }));
-app.useError((err, req, res, next) => res.status(500).json({ error: err.message || String(err) }));

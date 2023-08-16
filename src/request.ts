@@ -15,6 +15,7 @@ export interface Request extends http.IncomingMessage {
   protocol: "https"|"http";
   secure: boolean;
   path: string;
+  fullPath: string;
   stale: boolean;
   xhr: boolean;
   hostname?: string;

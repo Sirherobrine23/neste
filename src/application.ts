@@ -54,6 +54,7 @@ export class Router extends Function {
     this.set("subdomain offset", 2);
     this.set("trust proxy", false);
     this.set("json spaces", 2);
+    this.set("path resolve", true);
 
     // trust proxy inherit back-compat
     Object.defineProperty(this.settings, trustProxyDefaultSymbol, {
@@ -91,9 +92,18 @@ export class Router extends Function {
     req["res"] = res;
     // @ts-ignore
     res["req"] = req;
-    req["next"] = done;
+    req["next"] = next;
     let { pathname, query } = parse(req.url);
-    req["path"] ||= pathResolve(pathname);
+    req["path"] ||= (!!(this.set("path resolve")) ? pathResolve(pathname) : pathname);
+    if (!req["fullPath"]) {
+      req["fullPath"] = req["path"];
+      Object.defineProperty(req, "fullPath", {
+        configurable: false,
+        enumerable: false,
+        writable: false,
+        value: req["path"]
+      });
+    }
     const parseQuery = new URLSearchParams(query);
     const CookiesStorage = new Map<string, string>();
     if (typeof req.headers.cookie === "string") {
@@ -131,18 +141,32 @@ export class Router extends Function {
       else if (layer.method && layer.method !== method) return next(err);
       const layerMatch = layer.match(req["path"]);
       if (!layerMatch) return next(err);
+      if (layer.keys.length > 0 && (layerMatch.path.length < req["path"].length)) req["path"] = req["path"].slice(layerMatch.path.length);
       req["params"] = Object.assign({}, saveParms, layerMatch.params);
-      req["path"] = req["path"].slice(layerMatch.path.length) || layer.method && layerMatch.path || "/";
 
-      if (err) layer.handle_error(err, req as any, res as any, next)
+      if (err) layer.handle_error(err, req as any, res as any, next);
       else layer.handle_request(req as any, res as any, next);
     }
   }
 
+  /**
+   * Middleare extension
+   *
+   * @example
+   * ```js
+   * app.use(neste.Router().get(("/" ({res}) => res.json({ ok: true }))));
+   * ```
+   */
   use(...fn: RequestHandler[]): this;
+  /**
+   * Middleare extension
+   *
+   * @example
+   * ```js
+   * app.use("/foo", neste.Router().get(("/bar" ({res}) => res.json({ ok: true }))));
+   * ```
+   */
   use(path: string|RegExp, ...fn: RequestHandler[]): this;
-  use(...fn: ErrorRequestHandler[]): this;
-  use(path: string|RegExp, ...fn: ErrorRequestHandler[]): this;
   use() {
     const Args = Array.from(arguments);
     let path: any = "/", offset = 0;
@@ -162,6 +186,11 @@ export class Router extends Function {
     }
     return this;
   };
+
+  useError(...fn: ErrorRequestHandler[]): this;
+  useError() {
+    return this.use.apply(this, arguments);
+  }
 
   all(path: string|RegExp, ...fn: RequestHandler[]): this ;
   all() {

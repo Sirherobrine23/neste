@@ -3,6 +3,9 @@
 .github/
 *.tgz
 
+# Test
+*test*
+
 # Typescript
 *.tsbuildinfo
 src/**/*.ts

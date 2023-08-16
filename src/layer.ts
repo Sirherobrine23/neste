@@ -4,10 +4,25 @@ import { Request } from "./request";
 import { Response } from "./response";
 import { WebSocket } from "ws";
 
-export type ErrorRequestHandler = (error: any, req: Request, res: Response, next: (err?: any) => void) => void;
-export type WsRequestHandler = (req: Request, socket: WebSocket, next: (err?: any) => void) => void;
-export type RequestHandler = (req: Request, res: Response, next: (err?: any) => void) => void;
-export interface Handler extends RequestHandler, ErrorRequestHandler, WsRequestHandler {};
+
+export interface NextFunction {
+  /**
+   * Call for any error's
+   */
+  (err?: any): void;
+  /**
+   * "Break-out" of a router by calling {next('router')};
+   */
+  (deferToNext: 'router'): void;
+  /**
+   * "Break-out" of a route by calling {next('route')};
+   */
+  (deferToNext: 'route'): void;
+}
+export type ErrorRequestHandler = (error: any, req: Request, res: Response, next: NextFunction) => void;
+export type WsRequestHandler = (req: Request, socket: WebSocket, next: NextFunction) => void;
+export type RequestHandler = (req: Request, res: Response, next: NextFunction) => void;
+export type Handler = RequestHandler|ErrorRequestHandler|WsRequestHandler;
 
 export class Layer {
   handle: Handler;
@@ -20,7 +35,7 @@ export class Layer {
     if (path === "*") path = "(.*)";
     this.handle = fn;
     this.regexp = pathToRegexp(path, (this.keys = []), options);
-    this.regexp.fast_star = path === "*";
+    this.regexp.fast_star = path === "(.*)";
     this.regexp.fast_slash = path === "/" && options.end === false;
   }
 
@@ -30,7 +45,6 @@ export class Layer {
   method?: string;
 
   match(path: string): undefined|{ path: string, params: Record<string, string> } {
-    let match: string[];
     const decode_param = (val) => {
       if (typeof val !== 'string' || val.length === 0) return val;
       try {
@@ -44,18 +58,16 @@ export class Layer {
       }
     }
 
-    if (path !== null) {
+    // match the path
+    let match: string[] = this.regexp.exec(path);
+    if (!match) {
       // fast path non-ending match for / (any path matches)
       if (this.regexp.fast_slash) return { path: "", params: {} };
 
       // fast path for * (everything matche d in a param)
       if (this.regexp.fast_star) return { path, params: {"0": decode_param(path)} };
-
-      // match the path
-      match = this.regexp.exec(path);
+      return undefined;
     }
-
-    if (!match) return undefined;
 
     // store values
     const __path = match[0], keys = this.keys;
@@ -67,11 +79,17 @@ export class Layer {
         const val = decode_param(match[i]);
         if (!(val === undefined || Object.hasOwnProperty.call(acc, prop))) acc[prop] = val;
         return acc;
-      }, match.reduce((acc, v, index) => { const val = decode_param(v); if (val !== undefined) acc[String(index)] = v; return acc; }, {})),
+      }, match.reduce((acc, v, index) => {
+        if (!!v) {
+          const val = decode_param(v);
+          acc[String(index)] = val;
+        }
+        return acc;
+      }, {})),
     };
   }
 
-  async handle_request(req: Request, res: Response, next: (err?: any) => void) {
+  async handle_request(req: Request, res: Response, next: NextFunction) {
     const fn = this.handle;
     if (fn.length > 3) return next();
     try {
@@ -81,7 +99,7 @@ export class Layer {
     }
   }
 
-  async handle_error(err: any, req: Request, res: Response, next: (err?: any) => void) {
+  async handle_error(err: any, req: Request, res: Response, next: NextFunction) {
     const fn = this.handle;
     if (fn.length !== 4) return next(err);
     try {

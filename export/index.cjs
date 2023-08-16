@@ -3,7 +3,8 @@ const { parseBody } = require("../src/middles/bodyParse");
 const { staticFile } = require("../src/middles/staticFile");
 
 function neste() { return new app.Neste(); }
-neste.router = () => new app.Router();
-neste.bodyParse = parseBody;
-neste.staticFile = staticFile;
-exports = module.exports = neste;
+function router() { return new app.Router(); }
+module.exports = neste;
+module.exports.router = router;
+module.exports.parseBody = parseBody;
+module.exports.staticFile = staticFile;
