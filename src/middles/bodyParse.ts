@@ -122,7 +122,7 @@ export function parseBody(options?: ParseBodyOptions): RequestHandler {
         }, {});
       }
       chuckBuff = null;
-      next();
+      return next();
     } else if (req.is("multipart/form-data")) {
       if (!options.formData) return next();
       else if (!((typeof options.formData.tmpFolder === "string" && options.formData.tmpFolder.length > 0) || typeof options.formData.fileUpload === "function")) return next();
@@ -139,8 +139,8 @@ export function parseBody(options?: ParseBodyOptions): RequestHandler {
           parse.removeListener("finish", end);
         }
 
-        if (err) next(err);
-        else if (wait <= 0) next();
+        if (err) return next(err);
+        else if (wait <= 0)  return next();
       }
       parse.on("error", end).on("close", end).on("file", (name, str, fileInfo) => {
         wait++;

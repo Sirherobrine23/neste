@@ -87,7 +87,7 @@ export class Router extends Function {
    */
   handler(req: IncomingMessage, res: ServerResponse|WebSocket, done?: (err?: any) => void): void {
     if (!(this instanceof Router)) throw new Error("Cannot access class");
-    if (this.stacks.length === 0) return done();
+    else if (this.stacks.length === 0) return done();
     const method = req.method = res instanceof WebSocket ? "ws" : typeof req.method === "string" ? req.method.toLowerCase() : req.method;
     req["res"] = res;
     // @ts-ignore
@@ -136,7 +136,7 @@ export class Router extends Function {
       req["path"] = originalPath;
       if (err && err === "route") return done();
       else if (err && err === "router") return done(err);
-      const layer = stacks[stackX++];
+      const layer = stacks.at(stackX++);
       if (!layer) return done(err);
       else if (layer.method && layer.method !== method) return next(err);
       const layerMatch = layer.match(req["path"]);
@@ -144,8 +144,10 @@ export class Router extends Function {
       if (layer.keys.length > 0 && (layerMatch.path.length < req["path"].length)) req["path"] = req["path"].slice(layerMatch.path.length);
       req["params"] = Object.assign({}, saveParms, layerMatch.params);
 
-      if (err) layer.handle_error(err, req as any, res as any, next);
-      else layer.handle_request(req as any, res as any, next);
+      const fn = layer.handle;
+      if (err && fn.length !== 4) next(err);
+      else if (err) Promise.resolve().then(() => (fn as ErrorRequestHandler)(err, req as any, res as any, next)).catch(next);
+      else Promise.resolve().then(() => (fn as RequestHandler)(req as any, res as any, next)).catch(next);
     }
   }
 

@@ -89,23 +89,17 @@ export class Layer {
     };
   }
 
+  /** @deprecated */
   async handle_request(req: Request, res: Response, next: NextFunction) {
     const fn = this.handle;
     if (fn.length > 3) return next();
-    try {
-      await fn.apply(fn, arguments);
-    } catch (err) {
-      next(err);
-    }
+    Promise.resolve().then(() => fn.call(fn, req, res, next)).catch(next);
   }
 
+  /** @deprecated */
   async handle_error(err: any, req: Request, res: Response, next: NextFunction) {
     const fn = this.handle;
     if (fn.length !== 4) return next(err);
-    try {
-      await fn.apply(fn, arguments);
-    } catch (err) {
-      next(err);
-    }
+    Promise.resolve().then(() => fn.call(fn, err, req, res, next)).catch(next);
   }
 }
