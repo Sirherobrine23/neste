@@ -1,8 +1,7 @@
-import { Key, TokensToRegexpOptions, pathToRegexp } from "path-to-regexp";
-import { ParseOptions } from "querystring";
+import { MatchFunction, ParseOptions, RegexpToFunctionOptions, TokensToRegexpOptions, match as regexMatch } from "path-to-regexp";
+import { WebSocket } from "ws";
 import { Request } from "./request";
 import { Response } from "./response";
-import { WebSocket } from "ws";
 
 
 export interface NextFunction {
@@ -26,17 +25,18 @@ export type Handler = RequestHandler|ErrorRequestHandler|WsRequestHandler;
 
 export class Layer {
   handle: Handler;
-  regexp: RegExp & { fast_star?: boolean; fast_slash?: boolean };
-  keys: Key[];
+  regexp: MatchFunction;
+  fast_star?: boolean;
+  fast_slash?: boolean;
 
-  constructor(path: string|RegExp, fn: Handler, options?: TokensToRegexpOptions & ParseOptions) {
+  constructor(path: string|RegExp, fn: Handler, options?: Omit<ParseOptions & TokensToRegexpOptions & RegexpToFunctionOptions, "decode">) {
     if (!(typeof fn === "function")) throw new Error("Register function");
     if (!(options)) options = {};
     if (path === "*") path = "(.*)";
     this.handle = fn;
-    this.regexp = pathToRegexp(path, (this.keys = []), options);
-    this.regexp.fast_star = path === "(.*)";
-    this.regexp.fast_slash = path === "/" && options.end === false;
+    this.regexp = regexMatch(path, {...options, decode: decodeURIComponent });
+    this.fast_star = path === "(.*)";
+    this.fast_slash = path === "/" && options.end === false;
   }
 
   /**
@@ -58,34 +58,16 @@ export class Layer {
       }
     }
 
-    // match the path
-    let match: string[] = this.regexp.exec(path);
-    if (!match) {
-      // fast path non-ending match for / (any path matches)
-      if (this.regexp.fast_slash) return { path: "", params: {} };
+    // fast path non-ending match for / (any path matches)
+    if (this.fast_slash) return { path: "", params: {} };
 
-      // fast path for * (everything matche d in a param)
-      if (this.regexp.fast_star) return { path, params: {"0": decode_param(path)} };
-      return undefined;
-    }
-
-    // store values
-    const __path = match[0], keys = this.keys;
-    match = Array.from(match).slice(1);
+    // fast path for * (everything matche d in a param)
+    if (this.fast_star) return { path, params: {"0": decode_param(path)} };
+    const value = this.regexp(path);
+    if (!value) return undefined;
     return {
-      path: __path,
-      params: keys.reduce((acc, key, i) => {
-        const prop = key.name;
-        const val = decode_param(match[i]);
-        if (!(val === undefined || Object.hasOwnProperty.call(acc, prop))) acc[prop] = val;
-        return acc;
-      }, match.reduce((acc, v, index) => {
-        if (!!v) {
-          const val = decode_param(v);
-          acc[String(index)] = val;
-        }
-        return acc;
-      }, {})),
+      path: value.path,
+      params: value.params as any,
     };
   }
 

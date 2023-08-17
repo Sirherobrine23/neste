@@ -141,7 +141,7 @@ export class Router extends Function {
       else if (layer.method && layer.method !== method) return next(err);
       const layerMatch = layer.match(req["path"]);
       if (!layerMatch) return next(err);
-      if (layer.keys.length > 0 && (layerMatch.path.length < req["path"].length)) req["path"] = req["path"].slice(layerMatch.path.length);
+      if (layerMatch.path.length < req["path"].length) req["path"] = req["path"].slice(layerMatch.path.length);
       req["params"] = Object.assign({}, saveParms, layerMatch.params);
 
       const fn = layer.handle;

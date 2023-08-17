@@ -1,7 +1,7 @@
 {
   "name": "neste",
   "description": "a express fork",
-  "version": "2.0.5",
+  "version": "2.0.6",
   "author": "Matheus Sampaio Queiroga <srherobrine20@gmail.com>",
   "license": "MIT",
   "type": "commonjs",
