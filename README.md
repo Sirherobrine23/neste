@@ -4,7 +4,6 @@ A fork of [express](https://github.com/expressjs/express) with patches and impro
 
 ```js
 import neste from "neste";
-
 const app = neste();
 
 app.get("/", (req, res) => res.send("hello world"));
@@ -15,26 +14,11 @@ app.listen(3000, () => {
 });
 ```
 
-```js
-const neste = require("neste"), app = neste();
+## 3.x notice
 
-app.get("/", (req, res) => res.send("hello world"));
-app.get("/json", (req, res) => res.json({message: "hello world"}));
+version 3.0.0 is removing support for CommonJS, keeping only the ESM module. if you app/module is Commonjs module migrate to ESM or keep on ExpressJS.
 
-app.listen(3000, () => {
-  console.log("Listen on %s", 3000);
-});
-```
-
-## Installation
-
-in a simple way:
-
-```sh
-npm install --save neste
-```
-
-### Express middleware's
+## Express middleware's
 
 > **Important**
 > as a fork of express will be compatible some, probably some others have stopped in the future.

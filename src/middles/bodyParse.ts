@@ -5,7 +5,7 @@ import path from "path";
 import stream from "stream";
 import { finished } from "stream/promises";
 import { promisify } from "util";
-import { RequestHandler } from "../layer";
+import { RequestHandler } from "../handler.js";
 
 export type FileStorage = {
   filePath?: string;

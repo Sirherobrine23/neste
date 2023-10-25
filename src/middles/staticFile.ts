@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { pipeline } from "stream";
-import { RequestHandler } from "../layer";
+import { RequestHandler } from "../handler.js";
 
 export function staticFile(folderPath: string): RequestHandler {
   folderPath = path.resolve(process.cwd(), folderPath);
