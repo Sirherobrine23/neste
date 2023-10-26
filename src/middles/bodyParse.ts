@@ -13,6 +13,7 @@ export type FileStorage = {
   restore(fn: (err: any, stream?: stream.Readable) => void): void;
   delete(fn: (err?: any) => void): void;
 }
+
 export class LocalFile extends Map<string, FileStorage> {
   rootDir?: string;
   async deleteFile(file: string) {

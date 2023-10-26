@@ -6,8 +6,10 @@ import { parse } from "url";
 import { isIP } from "net";
 import { defineProperties, mixin } from "./util.js";
 import stream from "stream";
+import yaml from "yaml";
 import * as ranger from "./ranger.js";
 import { Router } from "./application.js";
+import { posix } from "path";
 
 export class CookieManeger extends Map<string, [string, cookie.CookieSerializeOptions]> {
   constructor(public initialCookies: string) {
@@ -39,6 +41,7 @@ export class CookieManeger extends Map<string, [string, cookie.CookieSerializeOp
 }
 
 export interface Request extends IncomingMessage {
+  app: Router;
   protocol: "https"|"http";
   secure: boolean;
   path: string;
@@ -198,6 +201,7 @@ export const codes = {
 
 export interface Response extends Omit<ServerResponse, "req"> {
   req: Request;
+  app: Router;
 }
 export class Response {
   set(key: string, value: string|string[]|number) {
@@ -248,8 +252,46 @@ export class Response {
    *     res.json({ user: 'tj' });
    */
   json(obj: any) {
-    if (!(this.has("Content-Type"))) this.set("Content-Type", "application/json")
-    return this.send(JSON.stringify(obj, null, 2));
+    if (!(obj && typeof obj === "object")) throw new TypeError("Require body object");
+    else if (!(this.has("Content-Type"))) this.set("Content-Type", "application/json")
+
+    // settings
+    const escape = this.app.settings.get("json escape")
+    const replacer = this.app.settings.get("json replacer");
+    const spaces = this.app.settings.get("json space");
+
+    // JSON Body
+    let jsonBody = JSON.stringify(obj, replacer, spaces);
+    if (escape && typeof jsonBody === "string") {
+      jsonBody = jsonBody.replace(/[<>&]/g, function (c) {
+        switch (c.charCodeAt(0)) {
+          case 0x3c:
+            return "\\u003c"
+          case 0x3e:
+            return "\\u003e"
+          case 0x26:
+            return "\\u0026"
+          /* istanbul ignore next: unreachable default */
+          default:
+            return c
+        }
+      });
+    }
+    return this.send(jsonBody);
+  }
+
+  /**
+   * Send YAML response.
+   *
+   * Examples:
+   *
+   *     res.yaml(null);
+   *     res.yaml({ user: 'tj' });
+   */
+  yaml(obj: any) {
+    if (!(obj && typeof obj === "object")) throw new TypeError("Require body object");
+    else if (!(this.has("Content-Type"))) this.set("Content-Type", "application/x-yaml; text/yaml")
+    return this.send(yaml.stringify(obj, null, 2));
   }
 
   /**
@@ -280,8 +322,9 @@ export class Response {
    *     res.send({ some: 'json' });
    *     res.send('<p>some html</p>');
    */
-  send(body: any) {
-    if (body === undefined || body === null) throw new TypeError("Require body");
+  send(body: any): this {
+    if (body === undefined) throw new TypeError("Require body");
+    else if (body === null) body = "";
     let encoding: BufferEncoding = "utf8";
     const bodyType = typeof body;
     if (bodyType === "string") {
@@ -370,34 +413,38 @@ export type Handlers = WsRequestHandler|RequestHandler|ErrorRequestHandler;
 
 export class Layer {
   method?: string;
+  isRoute?: boolean;
   handler: Handlers;
   matchFunc: MatchFunction;
   match(path: string): undefined|{ path: string, params: Record<string, string> } {
     const value = this.matchFunc(path);
     if (!value) return undefined;
     return {
-      path: value.path,
+      path: this.isRoute ? (value.path !== path ? posix.join("/", path.slice(value.path.length)) : value.path) : value.path,
       params: value.params as any,
     };
   }
 
-  constructor(path: string|RegExp, fn: Handlers, options?: Omit<ParseOptions & TokensToRegexpOptions & RegexpToFunctionOptions, "decode">) {
+  constructor(path: string|RegExp, fn: Handlers, options?: Omit<ParseOptions & TokensToRegexpOptions & RegexpToFunctionOptions & { isRoute?: boolean }, "decode"|"encode">) {
     if (!(typeof fn === "function")) throw new Error("Register function");
     if (!(options)) options = {};
     if (path === "*") path = "(.*)";
+    this.isRoute = !!options.isRoute;
     this.handler = fn;
-    this.matchFunc = regexMatch(path, {...options, decode: decodeURIComponent });
+    this.matchFunc = regexMatch(path, {...options, decode: decodeURIComponent, encode: encodeURI });
   }
 }
 
-export function assignRequest(req: IncomingMessage, method: string, params: Record<string, string>): Request {
+export function assignRequest(app: Router, req: IncomingMessage, method: string, params: Record<string, string>): Request {
+  if (req["__Neste"]) return req as any;
   const parseQuery = new URLSearchParams(parse(req.url).query);
   mixin(req, Request.prototype, false);
   defineProperties(req, {
-    method: { configurable: false, enumerable: false, writable: false, value: method },
-    Cookies: { configurable: false, enumerable: false, writable: false, value: new CookieManeger((req.headers||{}).cookie||"") },
-    query: { configurable: true, enumerable: true, writable: true, value: Object.assign(Array.from(parseQuery.keys()).reduce<Record<string, string>>((acc, key) => { acc[key] = parseQuery.get(key); return acc; }, {}), req["query"]) },
-    params: { configurable: false, enumerable: false, writable: false, value: params },
+    app: { writable: true, configurable: true, enumerable: true, value: app },
+    method: { writable: true, configurable: true, enumerable: true, value: method },
+    Cookies: { writable: true, configurable: true, enumerable: true, value: new CookieManeger((req.headers||{}).cookie||"") },
+    query: { writable: true, configurable: true, enumerable: true, value: Object.assign(Array.from(parseQuery.keys()).reduce<Record<string, string>>((acc, key) => { acc[key] = parseQuery.get(key); return acc; }, {}), req["query"]) },
+    params: { writable: true, configurable: true, enumerable: true, value: params },
     protocol: {
       configurable: true,
       enumerable: true,
@@ -464,15 +511,16 @@ export function assignRequest(req: IncomingMessage, method: string, params: Reco
   return req as any;
 }
 
-export function assignResponse(res: ServerResponse): Response {
+export function assignResponse(app: Router, res: ServerResponse): Response {
+  if (res["__Neste"]) return res as any;
   mixin(res, Response.prototype, false);
-  defineProperties(res, {});
+  defineProperties(res, {
+    app: { writable: true, configurable: true, enumerable: true, value: app }
+  });
   return res as any;
 }
 
-export function assignWsResponse(res: WebSocket, router: Router): WsResponse {
+export function assignWsResponse(res: WebSocket): WsResponse {
   mixin(res, WsResponse.prototype, false);
-  router.wsRooms
-  defineProperties(res, {});
   return res as any;
 }

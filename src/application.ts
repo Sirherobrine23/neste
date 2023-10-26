@@ -1,10 +1,22 @@
 import { IncomingMessage, Server, ServerResponse } from "http";
 import { AddressInfo, ListenOptions } from "net";
+import path from "path";
 import { parse } from "url";
 import util from "util";
 import { WebSocket, WebSocketServer } from "ws";
 import { ErrorRequestHandler, Handlers, Layer, NextFunction, RequestHandler, WsRequestHandler, assignRequest, assignResponse, assignWsResponse } from "./handler.js";
 import { Methods, methods } from "./util.js";
+
+export type RouterSettingsConfig = Record<string, any>;
+export class RouterSettings extends Map<string, any> {
+  constructor(sets?: RouterSettingsConfig) {
+    super();
+    if (sets) for (const k in sets) this.set(k, sets[k]);
+  }
+  toJSON(): RouterSettingsConfig {
+    return Array.from(this.entries()).reduce((acc, [key, value]) => Object.assign(acc, {[key]: value}), {});
+  }
+}
 
 export interface Router {
   (req: IncomingMessage, res: ServerResponse, next?: (err?: any) => void): void;
@@ -21,16 +33,25 @@ export interface Router {
 }
 
 export class Router extends Function {
-  constructor(opts?: any) {
+  constructor(routeOpts?: RouterSettingsConfig) {
     super("if (typeof this.handler === 'function') { this.handler.apply(this, arguments); } else if (typeof arguments.callee === 'function') { arguments.callee.apply(arguments.callee, arguments); } else { throw new Error('Cannot get Router class'); }");
+    this.settings = new RouterSettings(routeOpts);
+    this.settings.set("env", process.env.NODE_ENV || "development");
+    this.settings.set("path resolve", true).set("json space", 2);
+    this.settings.set("json replacer", (_key: string, value: any) => {
+      if (value instanceof BigInt || typeof value === "bigint") return { type: "bigint", value: value.toString() };
+      else if (value && typeof value.toJSON === "function") return value.toJSON();
+      return value;
+    });
   }
 
   layers: Layer[] = [];
   wsRooms: Map<string, WsRequestHandler[]> = new Map();
+  settings: RouterSettings;
 
   handler(req: IncomingMessage, res: WebSocket|ServerResponse, next?: NextFunction) {
-    if (typeof next !== "function") next = (err) => {
-      if (err && !(err === "router" || err === "route")) console.error(err);
+    if (typeof next !== "function") next = (err?: any) => {
+      if (err && !(err === "router" || err === "route") && this.settings.get("env") !== "production") console.error(err);
       if (res instanceof WebSocket) {
         res.send("Close connection!");
         res.close();
@@ -45,12 +66,13 @@ export class Router extends Function {
       }
     }
 
-    if (!req["path"]) req["path"] = (parse(req.url)).pathname;
-    const { layers } = this, method = (res instanceof WebSocket ? "ws" : (String(req.method||"").toLowerCase())), saveParms = Object.freeze(req["params"] || {}), originalPath = req["path"];;
+    const { layers } = this, method = (res instanceof WebSocket ? "ws" : (String(req.method||"").toLowerCase())), saveParms = Object.freeze(req["params"] || {});
+    let originalPath: string = req["path"]||(parse(req.url)).pathname;
+    if (this.settings.get("path resolve")) originalPath = path.posix.resolve("/", originalPath);
+    if (this.settings.has("app path") && typeof this.settings.get("app path") === "string" && originalPath.startsWith(this.settings.get("app path"))) originalPath = path.posix.resolve("/", originalPath.slice(path.posix.resolve("/", this.settings.get("app path")).length));
     let layersIndex = 0;
 
-    nextHandler().catch(next);
-    async function nextHandler(err?: any) {
+    const nextHandler = async (err?: any) => {
       req["path"] = originalPath;
       req["params"] = Object.assign({}, saveParms);
       if (err && err === "route") return next();
@@ -60,37 +82,39 @@ export class Router extends Function {
       else if (layer.method && layer.method !== method) return nextHandler(err);
       const layerMatch = layer.match(req["path"]);
       if (!layerMatch) return nextHandler(err);
+      req["path"] = layerMatch.path;
       if (err && layer.handler.length !== 4) return nextHandler(err);
       try {
         if (err) {
           if (res instanceof WebSocket) return nextHandler(err);
           const fn = layer.handler as ErrorRequestHandler;
-          await fn(err, assignRequest(req, method, Object.assign({}, saveParms, layerMatch.params)), assignResponse(res), nextHandler);
+          await fn(err, assignRequest(this, req, method, Object.assign({}, saveParms, layerMatch.params)), assignResponse(this, res), nextHandler);
         } else {
           if (res instanceof WebSocket) {
             const fn = layer.handler as WsRequestHandler;
-            await fn(assignRequest(req, method, Object.assign({}, saveParms, layerMatch.params)), assignWsResponse(res, this), nextHandler);
+            await fn(assignRequest(this, req, method, Object.assign({}, saveParms, layerMatch.params)), assignWsResponse(res), nextHandler);
           } else {
             const fn = layer.handler as RequestHandler;
-            await fn(assignRequest(req, method, Object.assign({}, saveParms, layerMatch.params)), assignResponse(res), nextHandler);
+            await fn(assignRequest(this, req, method, Object.assign({}, saveParms, layerMatch.params)), assignResponse(this, res), nextHandler);
           }
         }
       } catch (err) {
         nextHandler(err);
       }
     }
+    nextHandler().catch(next);
   }
 
 
-  use(...fn: Handlers[]): this;
-  use(path: string|RegExp, ...fn: Handlers[]): this;
+  use(...fn: RequestHandler[]): this;
+  use(path: string|RegExp, ...fn: RequestHandler[]): this;
   use() {
     let p: [string|RegExp, Handlers[]];
-    if (!(arguments[0] instanceof RegExp || typeof arguments[0] === "string" && arguments[0].trim())) p = ["/", Array.from(arguments)];
+    if (!(arguments[0] instanceof RegExp || typeof arguments[0] === "string" && arguments[0].trim())) p = ["(.*)", Array.from(arguments)];
     else p = [arguments[0], Array.from(arguments).slice(1)];
     for (const fn of p[1]) {
       if (typeof fn !== "function") throw new Error(util.format("Invalid middleare, require function, recived %s", typeof fn));
-      this.layers.push(new Layer(p[0], fn, { strict: false, end: false }));
+      this.layers.push(new Layer(p[0], fn, { isRoute: true, strict: false, end: false }));
     }
     return this;
   }
@@ -109,7 +133,7 @@ export class Router extends Function {
 methods.forEach(method => Router.prototype[method] = function(this: Router) { return this.__method.apply(this, ([method] as any[]).concat(Array.from(arguments))) } as any)
 
 export class Neste extends Router {
-  httpServer: Server;
+  httpServer?: Server;
   listen(port?: number, hostname?: string, backlog?: number, listeningListener?: () => void): this;
   listen(port?: number, hostname?: string, listeningListener?: () => void): this;
   listen(port?: number, backlog?: number, listeningListener?: () => void): this;
@@ -144,7 +168,7 @@ export class Neste extends Router {
       const wsServer = new WebSocketServer({ noServer: true });
       this.httpServer.on("upgrade", (req, sock, head) => wsServer.handleUpgrade(req, sock, head, (client) => this.handler(req, client)));
       return this.httpServer;
-    })()).address()
+    })()).address();
   }
 
   closeAllConnections(): void {
@@ -153,7 +177,7 @@ export class Neste extends Router {
       const wsServer = new WebSocketServer({ noServer: true });
       this.httpServer.on("upgrade", (req, sock, head) => wsServer.handleUpgrade(req, sock, head, (client) => this.handler(req, client)));
       return this.httpServer;
-    })()).closeAllConnections()
+    })()).closeAllConnections();
   }
 
   closeIdleConnections(): void {
@@ -188,7 +212,3 @@ export class Neste extends Router {
     return this;
   }
 }
-
-const app = new Neste();
-app.listen(3000, () => console.log("Http 3000"))
-app.get("/", ({headers, Cookies, hostname}, res) => res.json({ req: { headers, Cookies: Cookies.toJSON(), hostname } }))

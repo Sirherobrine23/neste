@@ -27,6 +27,9 @@ export function mixin<T, C>(dest: T, src: C, redefine?: boolean): T & C {
 }
 
 export function defineProperties(obj: any, config: Record<string, PropertyDescriptor & ThisType<any>>) {
-  for (let key in config) Object.defineProperty(obj, key, config[key]);
+  for (let key in config) {
+    if (config[key].value !== undefined) obj[key] = config[key].value;
+    else Object.defineProperty(obj, key, config[key]);
+  }
   return obj;
 }
