@@ -4,7 +4,7 @@ import path from "path";
 import { parse } from "url";
 import util from "util";
 import { WebSocket, WebSocketServer } from "ws";
-import { ErrorRequestHandler, Handlers, Layer, NextFunction, RequestHandler, WsRequestHandler, assignRequest, assignResponse, assignWsResponse } from "./handler.js";
+import { ErrorRequestHandler, Handlers, Layer, NextFunction, RequestHandler, WsRequestHandler, WsResponse, assignRequest, assignResponse, assignWsResponse } from "./handler.js";
 import { Methods, methods } from "./util.js";
 
 export type RouterSettingsConfig = Record<string, any>;
@@ -32,22 +32,44 @@ export interface Router {
   options(path: string|RegExp, ...fn: RequestHandler[]): this;
 }
 
+export class WsRoom extends Map<string, WsResponse[]> {
+  /**
+   * Send data to all connections
+   * @param room - room name
+   * @param data - Data
+   */
+  async send(room: string, data: string|Buffer|ArrayBuffer) {
+    if (!(super.has(room))) return;
+    await Promise.all(super.get(room).filter(s => !(s.CLOSED||s.CLOSING)).map(s => new Promise<void>((done, reject) => s.send(data, err => err ? reject(err) : done()))));
+  }
+
+  /**
+   * Close connections and delete room
+   * @param room - room name
+   */
+  close(room: string, code?: number) {
+    if (!(super.has(room))) return;
+    super.get(room).forEach(s => s.close(code));
+    super.delete(room);
+  }
+}
+
 export class Router extends Function {
   constructor(routeOpts?: RouterSettingsConfig) {
     super("if (typeof this.handler === 'function') { this.handler.apply(this, arguments); } else if (typeof arguments.callee === 'function') { arguments.callee.apply(arguments.callee, arguments); } else { throw new Error('Cannot get Router class'); }");
     this.settings = new RouterSettings(routeOpts);
-    this.settings.set("env", process.env.NODE_ENV || "development");
-    this.settings.set("path resolve", true).set("json space", 2);
+    this.settings.set("env", process.env.NODE_ENV || "development").set("path resolve", true).set("json space", 2);
     this.settings.set("json replacer", (_key: string, value: any) => {
       if (value instanceof BigInt || typeof value === "bigint") return { type: "bigint", value: value.toString() };
+      // else if (!(Array.isArray(value)) && value[Symbol.iterator]) return Array.from(value);
       else if (value && typeof value.toJSON === "function") return value.toJSON();
       return value;
     });
   }
 
   layers: Layer[] = [];
-  wsRooms: Map<string, WsRequestHandler[]> = new Map();
   settings: RouterSettings;
+  wsRooms: WsRoom = new WsRoom();
 
   handler(req: IncomingMessage, res: WebSocket|ServerResponse, next?: NextFunction) {
     if (typeof next !== "function") next = (err?: any) => {
@@ -92,7 +114,7 @@ export class Router extends Function {
         } else {
           if (res instanceof WebSocket) {
             const fn = layer.handler as WsRequestHandler;
-            await fn(assignRequest(this, req, method, Object.assign({}, saveParms, layerMatch.params)), assignWsResponse(res), nextHandler);
+            await fn(assignRequest(this, req, method, Object.assign({}, saveParms, layerMatch.params)), assignWsResponse(this, res), nextHandler);
           } else {
             const fn = layer.handler as RequestHandler;
             await fn(assignRequest(this, req, method, Object.assign({}, saveParms, layerMatch.params)), assignResponse(this, res), nextHandler);
@@ -115,6 +137,15 @@ export class Router extends Function {
     for (const fn of p[1]) {
       if (typeof fn !== "function") throw new Error(util.format("Invalid middleare, require function, recived %s", typeof fn));
       this.layers.push(new Layer(p[0], fn, { isRoute: true, strict: false, end: false }));
+    }
+    return this;
+  }
+
+  all(path: string|RegExp, ...handlers: RequestHandler[]) {
+    if (!(path instanceof RegExp || typeof path === "string" && path.trim())) throw new Error("Set path");
+    for (const fn of handlers) {
+      const layerHand = new Layer(path, fn);
+      this.layers.push(layerHand);
     }
     return this;
   }

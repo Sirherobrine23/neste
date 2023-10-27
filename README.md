@@ -14,6 +14,42 @@ app.listen(3000, () => {
 });
 ```
 
+### Example
+
+#### Standalone Nodejs
+
+```js
+import neste from "neste";
+const app = neste();
+
+app.get("/", (req, res) => res.set("Content-Type", "text/html").send("<p>Hello world</p>"));
+
+const PORT = Number(process.env.PORT || 3000);
+app.listen(PORT, () => console.log("Listen on %s", PORT));
+```
+
+#### Next.js API Routes
+
+- path: `/[...root].ts`
+
+```js
+import { Router } from "Neste";
+const app = new Router();
+export default app;
+
+app.get("/", (req, res) => res.send(`<p>Hello from root API</p>`));
+```
+
+- path: `/form/[...formsSlugs].ts`
+
+```js
+import { Router } from "Neste";
+const app = new Router({ "app path": "/form" });
+export default app;
+
+app.get("/", (req, res) => res.send(`<p>Hello from forms router</p>`));
+```
+
 ## 3.x notice
 
 version 3.0.0 is removing support for CommonJS, keeping only the ESM module. if you app/module is Commonjs module migrate to ESM or keep on ExpressJS.

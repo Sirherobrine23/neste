@@ -388,8 +388,24 @@ export class Response {
   }
 };
 
-export interface WsResponse extends WebSocket {}
-export class WsResponse {};
+export interface WsResponse extends WebSocket {
+  app: Router;
+}
+
+export class WsResponse {
+  join(room: string) {
+    if (!(this.app.wsRooms.has(room))) this.app.wsRooms.set(room, []);
+    this.app.wsRooms.get(room).push(this);
+    this.once("close", () => this.app.wsRooms.set(room, this.app.wsRooms.get(room).filter(s => s !== this)));
+    return this;
+  }
+
+  left(room: string) {
+    if (!(this.app.wsRooms.has(room))) throw new TypeError("Room no exists in current Router!");
+    this.app.wsRooms.set(room, this.app.wsRooms.get(room).filter(s => s !== this));
+    return this;
+  }
+};
 
 export interface NextFunction {
   /**
@@ -436,15 +452,13 @@ export class Layer {
 }
 
 export function assignRequest(app: Router, req: IncomingMessage, method: string, params: Record<string, string>): Request {
-  if (req["__Neste"]) return req as any;
   const parseQuery = new URLSearchParams(parse(req.url).query);
   mixin(req, Request.prototype, false);
+  mixin(req, { app, params }, true);
   defineProperties(req, {
-    app: { writable: true, configurable: true, enumerable: true, value: app },
     method: { writable: true, configurable: true, enumerable: true, value: method },
     Cookies: { writable: true, configurable: true, enumerable: true, value: new CookieManeger((req.headers||{}).cookie||"") },
     query: { writable: true, configurable: true, enumerable: true, value: Object.assign(Array.from(parseQuery.keys()).reduce<Record<string, string>>((acc, key) => { acc[key] = parseQuery.get(key); return acc; }, {}), req["query"]) },
-    params: { writable: true, configurable: true, enumerable: true, value: params },
     protocol: {
       configurable: true,
       enumerable: true,
@@ -512,15 +526,13 @@ export function assignRequest(app: Router, req: IncomingMessage, method: string,
 }
 
 export function assignResponse(app: Router, res: ServerResponse): Response {
-  if (res["__Neste"]) return res as any;
   mixin(res, Response.prototype, false);
-  defineProperties(res, {
-    app: { writable: true, configurable: true, enumerable: true, value: app }
-  });
+  mixin(res, { app }, true);
   return res as any;
 }
 
-export function assignWsResponse(res: WebSocket): WsResponse {
+export function assignWsResponse(app: Router, res: WebSocket): WsResponse {
   mixin(res, WsResponse.prototype, false);
+  mixin(res, { app }, true);
   return res as any;
 }

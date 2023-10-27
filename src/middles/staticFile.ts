@@ -5,7 +5,7 @@ import { RequestHandler } from "../handler.js";
 
 export function staticFile(folderPath: string): RequestHandler {
   folderPath = path.resolve(process.cwd(), folderPath);
-  if (!(fs.existsSync(folderPath))) throw new Error("Set valid foldwr");
+  if (!(fs.existsSync(folderPath))) throw new Error("Set valid folder");
   return (req, res, next) => {
     if (req.method.toLowerCase() !== "get") return next();
     const localFile = path.join(folderPath, req.path.substring(1));
