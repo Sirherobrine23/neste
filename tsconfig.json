@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "esModuleInterop": true,
-    "module": "CommonJS",
+    "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "target": "ESNext",
     "forceConsistentCasingInFileNames": true,
@@ -19,12 +19,8 @@
     ]
   },
   "exclude": [
-    "export/**",
-    "**/*.cjs",
-    "**/*.mjs",
-    "**/*.test.ts",
-    "**/testLocal/**",
-    "**/node_modules/**"
+    "**/node_modules/**",
+    "**/*.test.*"
   ],
   "ts-node": {
     "files": true,

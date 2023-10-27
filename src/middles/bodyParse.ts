@@ -5,7 +5,7 @@ import path from "path";
 import stream from "stream";
 import { finished } from "stream/promises";
 import { promisify } from "util";
-import { RequestHandler } from "../layer";
+import { RequestHandler } from "../handler.js";
 
 export type FileStorage = {
   filePath?: string;
@@ -13,6 +13,7 @@ export type FileStorage = {
   restore(fn: (err: any, stream?: stream.Readable) => void): void;
   delete(fn: (err?: any) => void): void;
 }
+
 export class LocalFile extends Map<string, FileStorage> {
   rootDir?: string;
   async deleteFile(file: string) {
