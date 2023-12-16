@@ -1,4 +1,4 @@
-const __methods = [ "ws", "get", "post", "put", "delete", "head", "connect", "options", "trace" ] as const;
+const __methods = [ "ws", "acl", "bind", "checkout", "connect", "copy", "delete", "get", "head", "link", "lock", "m-search", "merge", "mkactivity", "mkcalendar", "mkcol", "move", "notify", "options", "patch", "post", "propfind", "proppatch", "purge", "put", "rebind", "report", "search", "source", "subscribe", "trace", "unbind", "unlink", "unlock", "unsubscribe" ] as const;
 export type Methods = typeof __methods[number];
 export const methods: Methods[] = Object.freeze(__methods) as any;
 

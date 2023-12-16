@@ -7,7 +7,13 @@ import { WebSocket, WebSocketServer } from "ws";
 import { ErrorRequestHandler, Handlers, Layer, NextFunction, RequestHandler, WsRequestHandler, WsResponse, assignRequest, assignResponse, assignWsResponse } from "./handler.js";
 import { Methods, methods } from "./util.js";
 
-export type RouterSettingsConfig = Record<string, any>;
+export type RouterSettingsConfig = Partial<Record<"app path"|"env", string>> & Record<string, any> & {
+  "path resolve"?: boolean;
+  "json replacer"?: (key: string, value: any) => any;
+  "json escape"?: boolean;
+  "json space"?: string|number;
+};
+
 export class RouterSettings extends Map<string, any> {
   constructor(sets?: RouterSettingsConfig) {
     super();
@@ -71,6 +77,52 @@ export class Router extends Function {
   settings: RouterSettings;
   wsRooms: WsRoom = new WsRoom();
 
+  use(...fn: RequestHandler[]): this;
+  use(path: string|RegExp, ...fn: RequestHandler[]): this;
+  use() {
+    let p: [string|RegExp, Handlers[]];
+    if (!(arguments[0] instanceof RegExp || typeof arguments[0] === "string" && arguments[0].trim())) p = ["(.*)", Array.from(arguments)];
+    else p = [arguments[0], Array.from(arguments).slice(1)];
+    for (const fn of p[1]) {
+      if (typeof fn !== "function") throw new Error(util.format("Invalid middleare, require function, recived %s", typeof fn));
+      this.layers.push(new Layer(p[0], fn, { isRoute: true, strict: false, end: false }));
+    }
+    return this;
+  }
+
+  useError(...fn: ErrorRequestHandler[]): this;
+  useError(path: string|RegExp, ...fn: ErrorRequestHandler[]): this;
+  useError() {
+    this.use(...arguments);
+    return this;
+  }
+
+  all(path: string|RegExp, ...handlers: RequestHandler[]) {
+    if (!(path instanceof RegExp || typeof path === "string" && path.trim())) throw new Error("Set path");
+    for (const fn of handlers) {
+      const layerHand = new Layer(path, fn);
+      this.layers.push(layerHand);
+    }
+    return this;
+  }
+
+  /**
+   * Generic set router with request methods
+   * 
+   * @param method - Method - GET, POST, PUT, etc.
+   * @param path - Request path
+   * @param handlers - Callbacks
+   */
+  __method(method: Methods, path: string|RegExp, ...handlers: RequestHandler[]) {
+    if (!(path instanceof RegExp || typeof path === "string" && path.trim())) throw new Error("Set path");
+    for (const fn of handlers) {
+      const layerHand = new Layer(path, fn);
+      layerHand.method = method;
+      this.layers.push(layerHand);
+    }
+    return this;
+  }
+
   handler(req: IncomingMessage, res: WebSocket|ServerResponse, next?: NextFunction) {
     if (typeof next !== "function") next = (err?: any) => {
       if (err && !(err === "router" || err === "route") && this.settings.get("env") !== "production") console.error(err);
@@ -89,10 +141,9 @@ export class Router extends Function {
     }
 
     const { layers } = this, method = (res instanceof WebSocket ? "ws" : (String(req.method||"").toLowerCase())), saveParms = Object.freeze(req["params"] || {});
-    let originalPath: string = req["path"]||(parse(req.url)).pathname;
+    let originalPath: string = req["path"]||(parse(req.url)).pathname, layersIndex = 0;
     if (this.settings.get("path resolve")) originalPath = path.posix.resolve("/", originalPath);
     if (this.settings.has("app path") && typeof this.settings.get("app path") === "string" && originalPath.startsWith(this.settings.get("app path"))) originalPath = path.posix.resolve("/", originalPath.slice(path.posix.resolve("/", this.settings.get("app path")).length));
-    let layersIndex = 0;
 
     const nextHandler = async (err?: any) => {
       req["path"] = originalPath;
@@ -106,18 +157,26 @@ export class Router extends Function {
       if (!layerMatch) return nextHandler(err);
       req["path"] = layerMatch.path;
       if (err && layer.handler.length !== 4) return nextHandler(err);
+      const reqMod = assignRequest(this, req, method, Object.assign({}, saveParms, layerMatch.params));
+      if (!req["__set_cookie"]) {
+        req["__set_cookie"] = true;
+        Object.defineProperty(req.headers, "set-cookie", {
+          set(v) { reqMod.Cookies.fromString(v); },
+          get() { return reqMod.Cookies.toString(); },
+        });
+      }
       try {
         if (err) {
           if (res instanceof WebSocket) return nextHandler(err);
           const fn = layer.handler as ErrorRequestHandler;
-          await fn(err, assignRequest(this, req, method, Object.assign({}, saveParms, layerMatch.params)), assignResponse(this, res), nextHandler);
+          await fn(err, reqMod, assignResponse(this, res), nextHandler);
         } else {
           if (res instanceof WebSocket) {
             const fn = layer.handler as WsRequestHandler;
-            await fn(assignRequest(this, req, method, Object.assign({}, saveParms, layerMatch.params)), assignWsResponse(this, res), nextHandler);
+            await fn(reqMod, assignWsResponse(this, res), nextHandler);
           } else {
             const fn = layer.handler as RequestHandler;
-            await fn(assignRequest(this, req, method, Object.assign({}, saveParms, layerMatch.params)), assignResponse(this, res), nextHandler);
+            await fn(reqMod, assignResponse(this, res), nextHandler);
           }
         }
       } catch (err) {
@@ -125,39 +184,6 @@ export class Router extends Function {
       }
     }
     nextHandler().catch(next);
-  }
-
-
-  use(...fn: RequestHandler[]): this;
-  use(path: string|RegExp, ...fn: RequestHandler[]): this;
-  use() {
-    let p: [string|RegExp, Handlers[]];
-    if (!(arguments[0] instanceof RegExp || typeof arguments[0] === "string" && arguments[0].trim())) p = ["(.*)", Array.from(arguments)];
-    else p = [arguments[0], Array.from(arguments).slice(1)];
-    for (const fn of p[1]) {
-      if (typeof fn !== "function") throw new Error(util.format("Invalid middleare, require function, recived %s", typeof fn));
-      this.layers.push(new Layer(p[0], fn, { isRoute: true, strict: false, end: false }));
-    }
-    return this;
-  }
-
-  all(path: string|RegExp, ...handlers: RequestHandler[]) {
-    if (!(path instanceof RegExp || typeof path === "string" && path.trim())) throw new Error("Set path");
-    for (const fn of handlers) {
-      const layerHand = new Layer(path, fn);
-      this.layers.push(layerHand);
-    }
-    return this;
-  }
-
-  __method(method: Methods, path: string|RegExp, ...handlers: RequestHandler[]) {
-    if (!(path instanceof RegExp || typeof path === "string" && path.trim())) throw new Error("Set path");
-    for (const fn of handlers) {
-      const layerHand = new Layer(path, fn);
-      layerHand.method = method;
-      this.layers.push(layerHand);
-    }
-    return this;
   }
 };
 

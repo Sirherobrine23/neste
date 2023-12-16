@@ -9,10 +9,10 @@
   "types": "./src/index.d.ts",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Sirherobrine23/neste.git"
+    "url": "git+https://sirherobrine23.org/utils/neste.git"
   },
   "bugs": {
-    "url": "https://github.com/Sirherobrine23/neste/issues"
+    "url": "https://sirherobrine23.org/utils/neste/issues"
   },
   "keywords": [
     "express",
@@ -33,18 +33,21 @@
     "postpack": "tsc --build --clean"
   },
   "devDependencies": {
-    "@types/busboy": "^1.5.2",
+    "@types/busboy": "^1.5.3",
     "@types/cookie": "^0.6.0",
-    "@types/node": "^20.8.9",
-    "@types/ws": "^8.5.8",
-    "ts-node": "^10.9.1",
-    "typescript": "^5.2.2"
+    "@types/node": "^20.10.4",
+    "@types/ws": "^8.5.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
   },
   "dependencies": {
     "busboy": "^1.6.0",
     "cookie": "^0.6.0",
     "path-to-regexp": "^6.2.1",
-    "ws": "^8.14.2",
-    "yaml": "^2.3.3"
+    "ws": "^8.15.1",
+    "yaml": "^2.3.4"
+  },
+  "optionalDependencies": {
+    "next": "*"
   }
 }

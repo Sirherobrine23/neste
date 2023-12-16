@@ -1,4 +1,4 @@
-![npm](https://img.shields.io/npm/dw/neste) [![Teste](https://github.com/Sirherobrine23/neste/actions/workflows/test.yml/badge.svg)](https://github.com/Sirherobrine23/neste/actions/workflows/test.yml)
+![npm](https://img.shields.io/npm/dw/neste) [![Teste](https://sirherobrine23.org/utils/neste/actions/workflows/test.yml/badge.svg)](https://sirherobrine23.org/utils/neste/actions/workflows/test.yml)
 
 A fork of [express](https://github.com/expressjs/express) with patches and improvements for new integrations, fixes and more.
 
