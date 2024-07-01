@@ -43,7 +43,7 @@
   "dependencies": {
     "busboy": "^1.6.0",
     "cookie": "^0.6.0",
-    "path-to-regexp": "^6.2.1",
+    "path-to-regexp": "^7.0.0",
     "ws": "^8.15.1",
     "yaml": "^2.3.4"
   },
